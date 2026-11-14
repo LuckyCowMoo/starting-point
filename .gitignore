@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Production build & TS incremental info
+dist/
+dist-ssr/
+*.tsbuildinfo
+
+# Local env files (keep API keys/OAuth IDs out of git)
+.env
+.env.local
+.env.*.local
+
+# OS & editor junk
+.DS_Store
+Thumbs.db
+*.local

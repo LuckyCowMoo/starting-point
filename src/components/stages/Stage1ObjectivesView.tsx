@@ -151,8 +151,8 @@ export const Stage1ObjectivesView: React.FC<Stage1ObjectivesViewProps> = ({
                 <textarea
                   value={item.statement}
                   onChange={(e) => updateItem(item.id, 'statement', e.target.value)}
-                  rows={2}
-                  className="flex-1 bg-transparent text-sm font-semibold text-zinc-800 resize-none focus:outline-none focus:bg-white focus:px-2 focus:py-1 rounded-lg"
+                  rows={5}
+                  className="flex-1 bg-transparent text-sm font-semibold text-zinc-800 leading-relaxed min-h-[115px] resize-y focus:outline-none focus:bg-white focus:px-2 focus:py-1 rounded-lg"
                 />
                 <button
                   onClick={() => removeItem(item.id)}

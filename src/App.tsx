@@ -70,14 +70,61 @@ export function App() {
   useEffect(() => {
     void loadWorkspace().then((loaded) => {
       setWorkspace(loaded);
-      const firstSeq = loaded.sequences[0];
-      if (firstSeq) {
-        setActiveSequenceId(firstSeq.id);
-        setActiveLessonId(firstSeq.lessons[0]?.id || null);
+      let restoredSeqId: string | null = null;
+      let restoredLessonId: string | null = null;
+      let restoredStage: StageId | null = null;
+
+      try {
+        const rawNav = localStorage.getItem('starting-point-active-nav-v1');
+        if (rawNav) {
+          const parsed = JSON.parse(rawNav) as {
+            activeSequenceId?: string | null;
+            activeLessonId?: string | null;
+            activeStage?: StageId;
+          };
+          restoredSeqId = parsed.activeSequenceId ?? null;
+          restoredLessonId = parsed.activeLessonId ?? null;
+          if (
+            parsed.activeStage === 1 ||
+            parsed.activeStage === 2 ||
+            parsed.activeStage === 3 ||
+            parsed.activeStage === 4
+          ) {
+            restoredStage = parsed.activeStage;
+          }
+        }
+      } catch {
+        // ignore storage errors
+      }
+
+      const targetSeq =
+        loaded.sequences.find((s) => s.id === restoredSeqId) ||
+        loaded.sequences[0];
+      if (targetSeq) {
+        setActiveSequenceId(targetSeq.id);
+        const targetLesson =
+          targetSeq.lessons.find((l) => l.id === restoredLessonId) ||
+          targetSeq.lessons[0];
+        setActiveLessonId(targetLesson?.id || null);
+      }
+      if (restoredStage) {
+        setActiveStage(restoredStage);
       }
       setHydrated(true);
     });
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(
+        'starting-point-active-nav-v1',
+        JSON.stringify({ activeSequenceId, activeLessonId, activeStage })
+      );
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [activeSequenceId, activeLessonId, activeStage, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;

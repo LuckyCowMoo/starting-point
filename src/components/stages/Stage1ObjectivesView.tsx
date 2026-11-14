@@ -275,9 +275,9 @@ export const Stage1ObjectivesView: React.FC<Stage1ObjectivesViewProps> = ({
             onChange={(e) =>
               onUpdateSequence({ ...sequence, topicBrief: e.target.value })
             }
-            rows={2}
-            placeholder="Describe what pupils need to master, practical constraints, or curriculum spec links..."
-            className="w-full p-3 rounded-2xl bg-[#FAF6F0] border border-zinc-200 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            rows={7}
+            placeholder="Describe what pupils need to master, lesson allocation, practical tools or software tasks, excluded lessons/assessments, or curriculum spec links..."
+            className="w-full min-h-[168px] p-3.5 rounded-2xl bg-[#FAF6F0] border border-zinc-200 text-sm leading-relaxed text-zinc-800 resize-y focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
 

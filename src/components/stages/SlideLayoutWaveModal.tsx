@@ -14,6 +14,7 @@ import {
   SlidePresetId,
   WaveVariant,
 } from '../../types/curriculum';
+import { FlipHorizontal2 } from 'lucide-react';
 import {
   PHASE_PALETTES,
   SLIDE_PRESETS,
@@ -33,18 +34,25 @@ interface SlideLayoutWaveModalProps {
   initialPresetId: SlidePresetId;
   initialWaveVariant: WaveVariant;
   initialPhase: LessonPhase;
+  initialInvertWaveLayers?: boolean;
   onClose: () => void;
   onSelectPresetOnly?: (presetId: SlidePresetId, recommendedWave?: WaveVariant) => void;
-  onSelectWaveOnly?: (waveVariant: WaveVariant) => void;
-  onCompleteNewSlide?: (presetId: SlidePresetId, waveVariant: WaveVariant) => void;
+  onSelectWaveOnly?: (waveVariant: WaveVariant, invertWaveLayers?: boolean) => void;
+  onCompleteNewSlide?: (
+    presetId: SlidePresetId,
+    waveVariant: WaveVariant,
+    invertWaveLayers?: boolean
+  ) => void;
 }
 
 export function buildDummySlideForPreview(
   presetId: SlidePresetId,
   waveVariant: WaveVariant,
-  phase: LessonPhase
+  phase: LessonPhase,
+  invertWaveLayers = false
 ): SlideData {
   const sampleSvg = SVG_DIAGRAM_TEMPLATES[0];
+  const coverSvg = SVG_DIAGRAM_TEMPLATES[5] || sampleSvg;
   const todayStr = new Date().toLocaleDateString('en-GB', {
     weekday: 'short',
     day: 'numeric',
@@ -59,6 +67,7 @@ export function buildDummySlideForPreview(
     phase,
     presetId,
     waveVariant,
+    invertWaveLayers,
     title: 'Lorem Ipsum Dolor Sit Amet',
     lessonDate: todayStr,
     bigQuestion:
@@ -95,16 +104,16 @@ export function buildDummySlideForPreview(
         { term: 'Consectetur', definition: 'Supporting term' },
         { term: 'Adipiscing', definition: 'Process model' },
       ],
-      mediaItem: sampleSvg
+      mediaItem: coverSvg
         ? {
             id: 'prev-media',
             type: 'svg-diagram',
-            svgCode: sampleSvg.svgCode,
-            title: sampleSvg.title,
-            attribution: 'Preview Diagram',
-            cropFit: 'contain',
-            frameShape: 'rounded-card',
-            placement: 'boxed-card',
+            svgCode: coverSvg.svgCode,
+            title: coverSvg.title,
+            attribution: 'Cover Visual',
+            cropFit: 'cover',
+            frameShape: 'clean',
+            placement: 'fill-bottom-layer',
           }
         : undefined,
     };
@@ -252,6 +261,7 @@ export const SlideLayoutWaveModal: React.FC<SlideLayoutWaveModalProps> = ({
   initialPresetId,
   initialWaveVariant,
   initialPhase,
+  initialInvertWaveLayers = false,
   onClose,
   onSelectPresetOnly,
   onSelectWaveOnly,
@@ -263,14 +273,23 @@ export const SlideLayoutWaveModal: React.FC<SlideLayoutWaveModalProps> = ({
   const [chosenWave, setChosenWave] =
     useState<WaveVariant>(initialWaveVariant);
   const [previewPhase, setPreviewPhase] = useState<LessonPhase>(initialPhase);
+  const [invertWave, setInvertWave] = useState<boolean>(initialInvertWaveLayers);
 
   useEffect(() => {
     if (!isOpen) return;
     setChosenPreset(initialPresetId);
     setChosenWave(initialWaveVariant);
     setPreviewPhase(initialPhase);
+    setInvertWave(initialInvertWaveLayers);
     setStep(mode === 'change-wave' ? 2 : 1);
-  }, [isOpen, mode, initialPresetId, initialWaveVariant, initialPhase]);
+  }, [
+    isOpen,
+    mode,
+    initialPresetId,
+    initialWaveVariant,
+    initialPhase,
+    initialInvertWaveLayers,
+  ]);
 
   if (!isOpen) return null;
 
@@ -322,8 +341,8 @@ export const SlideLayoutWaveModal: React.FC<SlideLayoutWaveModalProps> = ({
               </h2>
               <p className="text-xs text-zinc-500">
                 {showingPresetGrid
-                  ? 'Visual previews rendered with realistic dummy classroom text. Click any layout to select.'
-                  : 'Every wave dynamically flows around your slide content. Click any wave shape to apply.'}
+                  ? 'Asset zone wireframe layouts (without background waves). Click any layout to choose where slide elements sit.'
+                  : 'Coloured 3D paper-cut waves positioned underneath your chosen asset layout. Flip sides anytime or pick a majority-coloured canvas.'}
               </p>
             </div>
           </div>
@@ -352,6 +371,23 @@ export const SlideLayoutWaveModal: React.FC<SlideLayoutWaveModalProps> = ({
                   2. 3D Wave
                 </span>
               </div>
+            )}
+
+            {/* Flip White / Colour button on Wave step */}
+            {!showingPresetGrid && (
+              <button
+                type="button"
+                onClick={() => setInvertWave((v) => !v)}
+                className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition ${
+                  invertWave
+                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-xs'
+                    : 'bg-white border-zinc-300 text-zinc-700 hover:bg-zinc-50'
+                }`}
+                title="Swap creamy white paper and coloured depth across all wave shapes"
+              >
+                <FlipHorizontal2 size={14} />
+                <span>Flip White / Colour</span>
+              </button>
             )}
 
             {/* Quick Phase Palette Switcher for Preview */}
@@ -432,6 +468,7 @@ export const SlideLayoutWaveModal: React.FC<SlideLayoutWaveModalProps> = ({
                       <SlideCanvas
                         slide={previewSlide}
                         isThumbnail
+                        hideWaveBackground
                         editorPreviewAllAnswers
                         interactiveTimer={false}
                       />
@@ -457,9 +494,6 @@ export const SlideLayoutWaveModal: React.FC<SlideLayoutWaveModalProps> = ({
                         <h3 className="text-sm font-extrabold text-zinc-900">
                           {preset.name}
                         </h3>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">
-                          {WAVE_VARIANT_LABELS[preset.recommendedWave]}
-                        </span>
                       </div>
                       <p className="text-xs text-zinc-500 leading-relaxed">
                         {preset.description}
@@ -476,15 +510,16 @@ export const SlideLayoutWaveModal: React.FC<SlideLayoutWaveModalProps> = ({
                 const previewSlide = buildDummySlideForPreview(
                   chosenPreset,
                   variantKey,
-                  previewPhase
+                  previewPhase,
+                  invertWave
                 );
                 const selectWave = () => {
                   setChosenWave(variantKey);
                   if (isWizard) {
-                    onCompleteNewSlide?.(chosenPreset, variantKey);
+                    onCompleteNewSlide?.(chosenPreset, variantKey, invertWave);
                     onClose();
                   } else {
-                    onSelectWaveOnly?.(variantKey);
+                    onSelectWaveOnly?.(variantKey, invertWave);
                     onClose();
                   }
                 };

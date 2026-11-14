@@ -15,6 +15,7 @@ import {
 interface PaperCutRendererProps {
   phase: LessonPhase;
   waveVariant: WaveVariant;
+  invertWaveLayers?: boolean;
   obstacles?: ObstacleBox[];
   customWaveLayers?: PaperCutLayer[];
   waveControlPoints?: Point[];
@@ -22,9 +23,18 @@ interface PaperCutRendererProps {
   className?: string;
 }
 
+export function svgCodeToDataUri(svgCode: string): string {
+  const hasXmlns = /xmlns\s*=/.test(svgCode);
+  const normalized = hasXmlns
+    ? svgCode
+    : svgCode.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(normalized)}`;
+}
+
 export const PaperCutRenderer: React.FC<PaperCutRendererProps> = ({
   phase,
   waveVariant,
+  invertWaveLayers = false,
   obstacles = [],
   customWaveLayers,
   waveControlPoints,
@@ -38,26 +48,30 @@ export const PaperCutRenderer: React.FC<PaperCutRendererProps> = ({
     palette,
     obstacles,
     customWaveLayers,
-    waveControlPoints
+    waveControlPoints,
+    invertWaveLayers
   );
 
-  const showBottomPhoto =
-    bottomFillMedia &&
-    bottomFillMedia.placement === 'fill-bottom-layer' &&
-    bottomFillMedia.type === 'image' &&
-    bottomFillMedia.url;
+  const bottomSrc =
+    bottomFillMedia && bottomFillMedia.placement === 'fill-bottom-layer'
+      ? bottomFillMedia.type === 'image' && bottomFillMedia.url
+        ? bottomFillMedia.url
+        : bottomFillMedia.type === 'svg-diagram' && bottomFillMedia.svgCode
+        ? svgCodeToDataUri(bottomFillMedia.svgCode)
+        : null
+      : null;
 
   return (
     <div className={`pointer-events-none select-none overflow-hidden ${className}`}>
-      {/* Full-bleed Bottom Layer Photo (cropped cleanly inside the bottom cavern) */}
-      {showBottomPhoto && (
+      {/* Full-bleed Bottom Layer Visual (cropped cleanly to fill inside the bottom wave cavern) */}
+      {bottomSrc && (
         <div
           className="absolute inset-0 z-0"
           style={{ backgroundColor: bottomBaseColor }}
         >
           <img
-            src={bottomFillMedia.url}
-            alt={bottomFillMedia.title}
+            src={bottomSrc}
+            alt={bottomFillMedia?.title || 'Slide visual'}
             className="absolute object-cover"
             style={{
               left: `${(bottomCavernRect.x / 1920) * 100}%`,
@@ -66,11 +80,12 @@ export const PaperCutRenderer: React.FC<PaperCutRendererProps> = ({
               height: `${(bottomCavernRect.h / 1080) * 100}%`,
             }}
           />
-          {/* Subtle colour-graded tint so bottom photo harmonises with theme */}
-          <div
-            className="absolute inset-0 opacity-20 mix-blend-multiply"
-            style={{ backgroundColor: bottomBaseColor }}
-          />
+          {bottomFillMedia?.type === 'image' && (
+            <div
+              className="absolute inset-0 opacity-18 mix-blend-multiply"
+              style={{ backgroundColor: bottomBaseColor }}
+            />
+          )}
         </div>
       )}
 
@@ -101,8 +116,8 @@ export const PaperCutRenderer: React.FC<PaperCutRendererProps> = ({
           ))}
         </defs>
 
-        {/* Bottom Dark Layer base fill when no bottom-layer photo is active */}
-        {!showBottomPhoto && (
+        {/* Outer / Bottom Layer base fill when no bottom-layer photo is active */}
+        {!bottomSrc && (
           <rect width="1920" height="1080" fill={bottomBaseColor} />
         )}
 
@@ -144,7 +159,7 @@ async function loadCorsImage(url: string): Promise<HTMLImageElement | null> {
 
 /**
  * High-resolution HTML5 Canvas 2D rasterizer using the exact same procedural wave curves
- * and optional cropped bottom-layer photo so PowerPoint & Google Slides match 100%.
+ * and optional cropped bottom-layer photo/SVG so PowerPoint & Google Slides match 100%.
  */
 export async function rasterizePaperCutToPngDataUrl(
   phase: LessonPhase,
@@ -154,7 +169,8 @@ export async function rasterizePaperCutToPngDataUrl(
   bottomFillMedia?: SlideMediaItem,
   width = 1920,
   height = 1080,
-  waveControlPoints?: Point[]
+  waveControlPoints?: Point[],
+  invertWaveLayers = false
 ): Promise<string> {
   const palette = PHASE_PALETTES[phase];
   const { bottomBaseColor, layers, bottomCavernRect } = computeConformingPaperCut(
@@ -162,7 +178,8 @@ export async function rasterizePaperCutToPngDataUrl(
     palette,
     obstacles,
     customWaveLayers,
-    waveControlPoints
+    waveControlPoints,
+    invertWaveLayers
   );
 
   const canvas = document.createElement('canvas');
@@ -179,27 +196,31 @@ export async function rasterizePaperCutToPngDataUrl(
   ctx.fillStyle = bottomBaseColor;
   ctx.fillRect(0, 0, 1920, 1080);
 
-  if (
-    bottomFillMedia &&
-    bottomFillMedia.placement === 'fill-bottom-layer' &&
-    bottomFillMedia.type === 'image' &&
-    bottomFillMedia.url
-  ) {
-    const img = await loadCorsImage(bottomFillMedia.url);
+  const bottomSrc =
+    bottomFillMedia && bottomFillMedia.placement === 'fill-bottom-layer'
+      ? bottomFillMedia.type === 'image' && bottomFillMedia.url
+        ? bottomFillMedia.url
+        : bottomFillMedia.type === 'svg-diagram' && bottomFillMedia.svgCode
+        ? svgCodeToDataUri(bottomFillMedia.svgCode)
+        : null
+      : null;
+
+  if (bottomSrc) {
+    const img = await loadCorsImage(bottomSrc);
     if (img) {
       const { x, y, w, h } = bottomCavernRect;
-      const imgAspect = img.width / img.height;
+      const imgAspect = (img.width || 1200) / (img.height || 1080);
       const boxAspect = w / h;
       let sx = 0;
       let sy = 0;
-      let sw = img.width;
-      let sh = img.height;
+      let sw = img.width || 1200;
+      let sh = img.height || 1080;
       if (imgAspect > boxAspect) {
-        sw = img.height * boxAspect;
-        sx = (img.width - sw) / 2;
+        sw = sh * boxAspect;
+        sx = ((img.width || 1200) - sw) / 2;
       } else {
-        sh = img.width / boxAspect;
-        sy = (img.height - sh) / 2;
+        sh = sw / boxAspect;
+        sy = ((img.height || 1080) - sh) / 2;
       }
       ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
     }

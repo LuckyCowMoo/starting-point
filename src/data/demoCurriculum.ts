@@ -342,11 +342,11 @@ export const DEMO_WORKSPACE: CurriculumWorkspace = {
               mediaItem: {
                 id: 'med-1-0',
                 type: 'svg-diagram',
-                title: 'Star vs Mesh Network Topologies',
-                svgCode: SVG_DIAGRAM_TEMPLATES[1].svgCode,
-                cropFit: 'contain',
-                frameShape: 'rounded-card',
-                placement: 'boxed-card',
+                title: 'Full-Bleed Network Cover Scene',
+                svgCode: SVG_DIAGRAM_TEMPLATES[5].svgCode,
+                cropFit: 'cover',
+                frameShape: 'clean',
+                placement: 'fill-bottom-layer',
               },
               routineIcons: ['key-vocab'],
               speakerNotes:
@@ -784,11 +784,11 @@ export const DEMO_WORKSPACE: CurriculumWorkspace = {
               mediaItem: {
                 id: 'med-2-0',
                 type: 'svg-diagram',
-                title: 'Packet Switching Across Routers',
-                svgCode: SVG_DIAGRAM_TEMPLATES[0].svgCode,
-                cropFit: 'contain',
-                frameShape: 'rounded-card',
-                placement: 'boxed-card',
+                title: 'Full-Bleed Network Cover Scene',
+                svgCode: SVG_DIAGRAM_TEMPLATES[5].svgCode,
+                cropFit: 'cover',
+                frameShape: 'clean',
+                placement: 'fill-bottom-layer',
               },
               routineIcons: ['key-vocab'],
               speakerNotes:

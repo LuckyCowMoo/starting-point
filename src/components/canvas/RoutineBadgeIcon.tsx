@@ -15,33 +15,53 @@ interface RoutineBadgeProps {
   type: RoutineIconType;
   compact?: boolean;
   onSlide?: boolean;
+  monochromeCorner?: boolean;
+  onDark?: boolean;
 }
 
 export const RoutineBadgeIcon: React.FC<RoutineBadgeProps> = ({
   type,
   compact = false,
   onSlide = false,
+  monochromeCorner = false,
+  onDark = false,
 }) => {
   const meta = ROUTINE_ICON_META[type];
 
-  const renderIcon = (size: number) => {
+  const renderIcon = (size: number, strokeWidth = 2) => {
     switch (type) {
       case 'write-in-books':
-        return <BookOpenCheck size={size} />;
+        return <BookOpenCheck size={size} strokeWidth={strokeWidth} />;
       case 'mwb-question':
-        return <PencilRuler size={size} />;
+        return <PencilRuler size={size} strokeWidth={strokeWidth} />;
       case 'pair-discussion':
-        return <MessageSquareMore size={size} />;
+        return <MessageSquareMore size={size} strokeWidth={strokeWidth} />;
       case 'independent-task':
-        return <ClipboardCheck size={size} />;
+        return <ClipboardCheck size={size} strokeWidth={strokeWidth} />;
       case 'key-vocab':
-        return <KeyRound size={size} />;
+        return <KeyRound size={size} strokeWidth={strokeWidth} />;
       case 'extension-challenge':
-        return <Sparkles size={size} />;
+        return <Sparkles size={size} strokeWidth={strokeWidth} />;
       case 'silent-think':
-        return <Brain size={size} />;
+        return <Brain size={size} strokeWidth={strokeWidth} />;
     }
   };
+
+  if (monochromeCorner) {
+    return (
+      <span
+        title={meta.label}
+        aria-label={meta.label}
+        className={`inline-flex items-center justify-center w-11 h-11 rounded-2xl transition-colors ${
+          onDark
+            ? 'text-white/85 bg-white/10'
+            : 'text-zinc-800/80 bg-zinc-900/6'
+        }`}
+      >
+        {renderIcon(28, 2.1)}
+      </span>
+    );
+  }
 
   if (compact) {
     return (

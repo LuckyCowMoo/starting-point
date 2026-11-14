@@ -223,4 +223,7 @@ export const WAVE_VARIANT_LABELS: Record<WaveVariant, string> = {
   'bottom-undulation': 'Bottom Rolling Hills',
   'framed-halo': 'Central Paper-Cut Halo',
   'dual-ribbon': 'Balanced Dual Ribbons',
+  'dark-canvas-left-paper': 'Coloured Canvas — Left Paper Island',
+  'dark-canvas-bottom-paper': 'Coloured Canvas — Bottom Paper Sweep',
+  'dark-halo-spotlight': 'Coloured Stage — Central White Island',
 };

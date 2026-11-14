@@ -4,6 +4,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  FlipHorizontal2,
   Image as ImageIcon,
   Loader2,
   Lock,
@@ -38,6 +39,7 @@ import {
   WAVE_VARIANT_LABELS,
 } from '../../data/palettes';
 import { SlideCanvas } from '../canvas/SlideCanvas';
+import { SVG_DIAGRAM_TEMPLATES } from '../../data/svgDiagramLibrary';
 import { RoutineBadgeIcon } from '../canvas/RoutineBadgeIcon';
 import { MediaPickerModal } from '../media/MediaPickerModal';
 import { SlideLayoutWaveModal, SlidePickerModalMode } from './SlideLayoutWaveModal';
@@ -129,11 +131,13 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
 
   const createSlideFromWizard = (
     presetId: SlidePresetId,
-    waveVariant: WaveVariant
+    waveVariant: WaveVariant,
+    invertWaveLayers = false
   ) => {
     const newNum = lesson.slidesData.length + 1;
     const isStarter = presetId === 'mwb-starter-quadrant';
     const isTitle = presetId === 'lesson-title-page';
+    const coverTemplate = SVG_DIAGRAM_TEMPLATES[5] || SVG_DIAGRAM_TEMPLATES[0];
     const newSlide: SlideData = {
       id: `sl-manual-${Date.now()}`,
       blueprintId: '',
@@ -141,6 +145,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
       phase: isStarter ? 'starter' : isTitle ? 'explanation' : 'task',
       presetId,
       waveVariant,
+      invertWaveLayers,
       title: isTitle
         ? lesson.title
         : isStarter
@@ -200,6 +205,19 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
               },
             ],
       routineIcons: isStarter ? ['mwb-question'] : ['pair-discussion', 'write-in-books'],
+      mediaItem:
+        isTitle && coverTemplate
+          ? {
+              id: `med-manual-${Date.now()}`,
+              type: 'svg-diagram',
+              svgCode: coverTemplate.svgCode,
+              title: coverTemplate.title,
+              attribution: 'Title Cover Visual',
+              cropFit: 'cover',
+              frameShape: 'clean',
+              placement: 'fill-bottom-layer',
+            }
+          : undefined,
       timerSeconds: isTitle ? undefined : 300,
       speakerNotes: 'Add teacher guidance and expected answers here.',
     };
@@ -393,6 +411,27 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
               )}
               <button
                 type="button"
+                onClick={() =>
+                  updateActiveSlide({
+                    invertWaveLayers: !slide.invertWaveLayers,
+                  })
+                }
+                className={`px-3 py-1 rounded-lg border text-[11px] font-bold flex items-center gap-1.5 transition ${
+                  slide.invertWaveLayers
+                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-xs'
+                    : 'bg-white border-zinc-300 text-zinc-700 hover:bg-zinc-50'
+                }`}
+                title="Swap which side of the wave boundary is creamy white paper vs saturated colour"
+              >
+                <FlipHorizontal2 size={13} />
+                <span>
+                  {slide.invertWaveLayers
+                    ? 'White / Colour: Flipped'
+                    : 'Flip White / Colour'}
+                </span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setShowWavePathEditor((v) => !v)}
                 className={`px-3 py-1 rounded-lg border text-[11px] font-bold flex items-center gap-1.5 transition ${
                   showWavePathEditor
@@ -544,6 +583,27 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                         </span>
                         <span className="text-[10px] text-emerald-700 font-bold shrink-0">
                           Visual Picker
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateActiveSlide({
+                            invertWaveLayers: !slide.invertWaveLayers,
+                          })
+                        }
+                        className={`w-full mt-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center justify-between gap-2 transition ${
+                          slide.invertWaveLayers
+                            ? 'bg-zinc-900 text-white border-zinc-900'
+                            : 'bg-white border-zinc-300 text-zinc-700 hover:bg-zinc-50'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <FlipHorizontal2 size={13} />
+                          <span>Flip White / Colour</span>
+                        </span>
+                        <span className="text-[10px] opacity-80">
+                          {slide.invertWaveLayers ? 'Flipped' : 'Default'}
                         </span>
                       </button>
                     </div>
@@ -996,7 +1056,19 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
         pexelsApiKey={settings.pexelsApiKey}
         pixabayApiKey={settings.pixabayApiKey}
         onClose={() => setMediaOpen(false)}
-        onSelectMedia={(media) => updateActiveSlide({ mediaItem: media })}
+        onSelectMedia={(media) =>
+          updateActiveSlide({
+            mediaItem:
+              slide.presetId === 'lesson-title-page'
+                ? {
+                    ...media,
+                    placement:
+                      slide.mediaItem?.placement ?? 'fill-bottom-layer',
+                    cropFit: 'cover',
+                  }
+                : media,
+          })
+        }
       />
 
       <SlideLayoutWaveModal
@@ -1005,6 +1077,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
         initialPresetId={slide.presetId}
         initialWaveVariant={slide.waveVariant}
         initialPhase={slide.phase}
+        initialInvertWaveLayers={Boolean(slide.invertWaveLayers)}
         onClose={() => setPickerModalMode(null)}
         onSelectPresetOnly={(presetId, recommendedWave) => {
           updateActiveSlide({
@@ -1014,9 +1087,10 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
               : {}),
           });
         }}
-        onSelectWaveOnly={(waveVariant) => {
+        onSelectWaveOnly={(waveVariant, invertWaveLayers) => {
           updateActiveSlide({
             waveVariant,
+            ...(invertWaveLayers !== undefined ? { invertWaveLayers } : {}),
             customWaveLayers: undefined,
             waveControlPoints: undefined,
           });

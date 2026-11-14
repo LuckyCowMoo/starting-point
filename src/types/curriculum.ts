@@ -40,7 +40,10 @@ export type WaveVariant =
   | 'diagonal-surge'
   | 'bottom-undulation'
   | 'framed-halo'
-  | 'dual-ribbon';
+  | 'dual-ribbon'
+  | 'dark-canvas-left-paper'
+  | 'dark-canvas-bottom-paper'
+  | 'dark-halo-spotlight';
 
 export interface PhasePalette {
   phase: LessonPhase;
@@ -188,6 +191,7 @@ export interface SlideData {
   phase: LessonPhase;
   presetId: SlidePresetId;
   waveVariant: WaveVariant;
+  invertWaveLayers?: boolean;
   title: string;
   lessonDate?: string;
   subtitle?: string;

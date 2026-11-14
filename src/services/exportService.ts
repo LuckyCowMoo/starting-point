@@ -2,7 +2,11 @@ import PptxGenJS from 'pptxgenjs';
 import { PlannedLesson, SlideData } from '../types/curriculum';
 import { PHASE_PALETTES } from '../data/palettes';
 import { rasterizePaperCutToPngDataUrl } from '../components/canvas/PaperCutRenderer';
-import { estimateSlideObstacles } from '../components/canvas/paperCutPresets';
+import {
+  estimateSlideObstacles,
+  isSlideRegionDark,
+} from '../components/canvas/paperCutPresets';
+import { isMcOptionCorrect } from '../components/canvas/SlideCanvas';
 
 async function svgStringToPngDataUrl(
   svgCode: string,
@@ -77,9 +81,14 @@ export async function generateLessonPptxBlob(
     onProgress?.(`Rendering 3D paper-cut slide ${i + 1} of ${lesson.slidesData.length}...`);
 
     const obstacles = estimateSlideObstacles(slide);
+    const mediaPlacement =
+      slide.mediaItem?.placement ??
+      (slide.presetId === 'lesson-title-page'
+        ? 'fill-bottom-layer'
+        : 'boxed-card');
     const bottomFillMedia =
-      slide.mediaItem && slide.mediaItem.placement === 'fill-bottom-layer'
-        ? slide.mediaItem
+      slide.mediaItem && mediaPlacement === 'fill-bottom-layer'
+        ? { ...slide.mediaItem, placement: 'fill-bottom-layer' as const }
         : undefined;
 
     const bgPng = await rasterizePaperCutToPngDataUrl(
@@ -90,7 +99,8 @@ export async function generateLessonPptxBlob(
       bottomFillMedia,
       1920,
       1080,
-      slide.waveControlPoints
+      slide.waveControlPoints,
+      Boolean(slide.invertWaveLayers)
     );
 
     // For 4-Quadrant MWB Starter, generate 5 progressive reveal states (0..4)
@@ -100,16 +110,25 @@ export async function generateLessonPptxBlob(
         ? [0, 1, 2, 3, 4]
         : [0];
 
+    const headerIsDark = isSlideRegionDark(
+      slide.waveVariant,
+      'header',
+      Boolean(slide.invertWaveLayers)
+    );
+    const headerTextColor = headerIsDark
+      ? 'FFFFFF'
+      : palette.darkInk.replace('#', '');
+    const isBlockOnDark = (layer?: 'top' | 'bottom') =>
+      isSlideRegionDark(
+        slide.waveVariant,
+        layer === 'bottom' ? 'bottom' : 'top',
+        Boolean(slide.invertWaveLayers)
+      );
+
     for (const revealCount of revealStates) {
       const pptSlide = pptx.addSlide();
       pptSlide.background = { data: bgPng };
       addSpeakerNotesAndBadges(pptSlide, slide);
-
-      const headerTextColor =
-        slide.presetId === 'mwb-starter-quadrant' &&
-        slide.waveVariant === 'top-bottom-strata'
-          ? 'FFFFFF'
-          : palette.darkInk.replace('#', '');
 
       // Clean Single-Line Title (rendered by lesson-title-page itself below date)
       if (slide.presetId !== 'lesson-title-page') {
@@ -202,22 +221,38 @@ export async function generateLessonPptxBlob(
               const row = Math.floor(optIdx / 2);
               const letter = ['A', 'B', 'C', 'D'][optIdx];
               const cleanOpt = opt.replace(/^[A-D][\s.):\-]+/i, '');
+              const isCorrect = isMcOptionCorrect(opt, optIdx, q.answer);
+              const optFill = isRevealed
+                ? isCorrect
+                  ? '059669'
+                  : 'F4F4F5'
+                : 'FFFFFF';
+              const optLine = isRevealed
+                ? isCorrect
+                  ? '047857'
+                  : 'E4E4E7'
+                : 'E2E8F0';
+              const optColor = isRevealed
+                ? isCorrect
+                  ? 'FFFFFF'
+                  : '9CA3AF'
+                : '334155';
+
               pptSlide.addText(`${letter}  ${cleanOpt}`, {
                 x: pos.x + 0.18 + col * 2.8,
-                y: pos.y + 0.98 + row * 0.44,
+                y: pos.y + 1.04 + row * 0.64,
                 w: 2.7,
-                h: 0.38,
+                h: 0.54,
                 fontFace: 'Plus Jakarta Sans',
-                fontSize: 10.5,
-                color: '334155',
-                fill: { color: 'FFFFFF' },
-                line: { color: 'E2E8F0', width: 0.75 },
-                rectRadius: 0.06,
+                fontSize: 11,
+                bold: Boolean(isRevealed && isCorrect),
+                color: optColor,
+                fill: { color: optFill },
+                line: { color: optLine, width: isRevealed && isCorrect ? 1.5 : 0.75 },
+                rectRadius: 0.08,
               });
             });
-          }
-
-          if (isRevealed) {
+          } else if (isRevealed) {
             pptSlide.addText(q.answer, {
               x: pos.x + 0.18,
               y: pos.y + 2.02,
@@ -277,7 +312,7 @@ export async function generateLessonPptxBlob(
           fontFace: 'Outfit',
           fontSize: 38,
           bold: true,
-          color: palette.darkInk.replace('#', ''),
+          color: headerTextColor,
           valign: 'top',
         });
 
@@ -304,7 +339,7 @@ export async function generateLessonPptxBlob(
           });
         }
 
-        if (slide.mediaItem && slide.mediaItem.placement !== 'fill-bottom-layer') {
+        if (slide.mediaItem && mediaPlacement !== 'fill-bottom-layer') {
           let coverUri: string | null = null;
           if (slide.mediaItem.type === 'svg-diagram' && slide.mediaItem.svgCode) {
             coverUri = await svgStringToPngDataUrl(slide.mediaItem.svgCode);
@@ -439,10 +474,14 @@ export async function generateLessonPptxBlob(
 
       // 4. Standard Content Blocks + Optional Media
       const hasBoxedMedia = Boolean(
-        slide.mediaItem && slide.mediaItem.placement !== 'fill-bottom-layer'
+        slide.mediaItem && mediaPlacement !== 'fill-bottom-layer'
       );
       const blockAreaW = hasBoxedMedia ? 6.1 : 12.0;
-      const startX = slide.waveVariant === 'vertical-scurve-left' ? 3.2 : 0.65;
+      const startX =
+        slide.waveVariant === 'vertical-scurve-left' ||
+        slide.waveVariant === 'dark-canvas-left-paper'
+          ? 3.2
+          : 0.65;
       const count = Math.max(1, slide.bodyBlocks.length);
       const blockH = Math.min(1.65, 5.1 / count);
 
@@ -453,8 +492,8 @@ export async function generateLessonPptxBlob(
         const colW = hasBoxedMedia ? 3.55 : 5.8;
 
         colA.forEach((b, idx) => {
-          const isBottom = b.layer === 'bottom';
-          if (!isBottom) {
+          const isDarkSurface = isBlockOnDark(b.layer);
+          if (!isDarkSurface) {
             pptSlide.addShape(pptx.ShapeType.roundRect, {
               x: 0.65,
               y: 1.5 + idx * 2.6,
@@ -467,8 +506,8 @@ export async function generateLessonPptxBlob(
           }
           pptSlide.addText(
             [
-              ...(b.heading ? [{ text: `${b.heading}\n`, options: { bold: true, fontSize: 16, color: isBottom ? 'FFFFFF' : palette.accent.replace('#', '') } }] : []),
-              { text: b.content, options: { fontSize: 13, color: isBottom ? 'F1F5F9' : '27272A' } },
+              ...(b.heading ? [{ text: `${b.heading}\n`, options: { bold: true, fontSize: 16, color: isDarkSurface ? 'FFFFFF' : palette.accent.replace('#', '') } }] : []),
+              { text: b.content, options: { fontSize: 13, color: isDarkSurface ? 'F1F5F9' : '27272A' } },
             ],
             { x: 0.85, y: 1.65 + idx * 2.6, w: colW - 0.4, h: 4.5 / Math.max(1, colA.length), valign: 'top' }
           );
@@ -476,8 +515,8 @@ export async function generateLessonPptxBlob(
 
         const colBX = 0.65 + colW + 0.35;
         colB.forEach((b, idx) => {
-          const isBottom = b.layer === 'bottom';
-          if (!isBottom) {
+          const isDarkSurface = isBlockOnDark(b.layer);
+          if (!isDarkSurface) {
             pptSlide.addShape(pptx.ShapeType.roundRect, {
               x: colBX,
               y: 1.5 + idx * 2.6,
@@ -490,8 +529,8 @@ export async function generateLessonPptxBlob(
           }
           pptSlide.addText(
             [
-              ...(b.heading ? [{ text: `${b.heading}\n`, options: { bold: true, fontSize: 16, color: isBottom ? 'FFFFFF' : palette.accent.replace('#', '') } }] : []),
-              { text: b.content, options: { fontSize: 13, color: isBottom ? 'F1F5F9' : '27272A' } },
+              ...(b.heading ? [{ text: `${b.heading}\n`, options: { bold: true, fontSize: 16, color: isDarkSurface ? 'FFFFFF' : palette.accent.replace('#', '') } }] : []),
+              { text: b.content, options: { fontSize: 13, color: isDarkSurface ? 'F1F5F9' : '27272A' } },
             ],
             { x: colBX + 0.2, y: 1.65 + idx * 2.6, w: colW - 0.4, h: 4.5 / Math.max(1, colB.length), valign: 'top' }
           );
@@ -499,9 +538,13 @@ export async function generateLessonPptxBlob(
       } else {
         slide.bodyBlocks.forEach((b, idx) => {
           const yPos = 1.45 + idx * (blockH + 0.18);
-          const w = slide.waveVariant === 'vertical-scurve-left' ? 9.4 : blockAreaW;
-          const isBottom = b.layer === 'bottom';
-          if (!isBottom) {
+          const w =
+            slide.waveVariant === 'vertical-scurve-left' ||
+            slide.waveVariant === 'dark-canvas-left-paper'
+              ? 9.4
+              : blockAreaW;
+          const isDarkSurface = isBlockOnDark(b.layer);
+          if (!isDarkSurface) {
             pptSlide.addShape(pptx.ShapeType.roundRect, {
               x: startX,
               y: yPos,
@@ -515,14 +558,14 @@ export async function generateLessonPptxBlob(
           pptSlide.addText(
             [
               ...(b.heading
-                ? [{ text: `${b.heading}\n`, options: { bold: true, fontSize: 15, color: isBottom ? 'FFFFFF' : b.style === 'code' ? '34D399' : palette.accent.replace('#', '') } }]
+                ? [{ text: `${b.heading}\n`, options: { bold: true, fontSize: 15, color: isDarkSurface ? 'FFFFFF' : b.style === 'code' ? '34D399' : palette.accent.replace('#', '') } }]
                 : []),
               {
                 text: b.content,
                 options: {
                   fontSize: 13,
                   fontFace: b.style === 'code' ? 'JetBrains Mono' : 'Plus Jakarta Sans',
-                  color: isBottom ? 'F1F5F9' : b.style === 'code' ? 'A7F3D0' : '27272A',
+                  color: isDarkSurface ? 'F1F5F9' : b.style === 'code' ? 'A7F3D0' : '27272A',
                 },
               },
             ],

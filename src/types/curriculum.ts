@@ -241,6 +241,7 @@ export interface LessonSequence {
   keyStage: string;
   lessonCount: number;
   defaultLessonMinutes: number;
+  priorUnitSummary?: string;
   topicBrief: string;
   updatedAt: string;
   stage1Approved: boolean;

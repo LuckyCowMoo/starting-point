@@ -265,6 +265,22 @@ export const Stage1ObjectivesView: React.FC<Stage1ObjectivesViewProps> = ({
           </div>
         </div>
 
+        {/* Prior Unit Context for Spaced Retrieval */}
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1.5">
+            Previous Unit / Prior Topics Covered (Used for Spaced Retrieval Starters)
+          </label>
+          <textarea
+            value={sequence.priorUnitSummary || ''}
+            onChange={(e) =>
+              onUpdateSequence({ ...sequence, priorUnitSummary: e.target.value })
+            }
+            rows={2}
+            placeholder="What was the previous unit about? (e.g. 'Binary & denary conversions, units of storage, and CPU components' — Starters only practise retrieval of already-taught topics, so Lesson 1's starter will draw from this prior unit)"
+            className="w-full p-3.5 rounded-2xl bg-[#FAF6F0] border border-zinc-200 text-sm leading-relaxed text-zinc-800 resize-y focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
+
         {/* Topic Brief */}
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1.5">

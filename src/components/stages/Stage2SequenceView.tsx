@@ -3,12 +3,13 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
-  Clock,
   Lightbulb,
   Loader2,
   Lock,
+  Plus,
   Sparkles,
   Terminal,
+  Trash2,
   Users,
 } from 'lucide-react';
 import {
@@ -206,20 +207,13 @@ export const Stage2SequenceView: React.FC<Stage2SequenceViewProps> = ({
                     }
                     className="w-full text-lg font-display font-bold text-zinc-900 bg-transparent focus:outline-none focus:bg-[#FAF6F0] rounded-lg px-1.5 -mx-1.5"
                   />
-                  <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-zinc-500">
-                    <span className="inline-flex items-center gap-1 font-semibold text-zinc-700">
-                      <Clock size={13} /> {lesson.durationMinutes} mins total •{' '}
-                      <span className="text-emerald-700">
-                        {lesson.timeBudgetMinutes}m planned (15% buffer:{' '}
-                        {lesson.bufferMinutes}m)
-                      </span>
-                    </span>
-                    {lesson.slidesBlueprint.length > 0 && (
+                  {lesson.slidesBlueprint.length > 0 && (
+                    <div className="mt-1 text-xs">
                       <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
                         {lesson.slidesBlueprint.length} slides planned
                       </span>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -234,49 +228,110 @@ export const Stage2SequenceView: React.FC<Stage2SequenceViewProps> = ({
 
             <textarea
               value={lesson.summary}
-              rows={2}
+              rows={5}
               onChange={(e) =>
                 updateLessonField(lesson.id, { summary: e.target.value })
               }
-              className="w-full p-3 rounded-2xl bg-[#FAF6F0] border border-zinc-200/70 text-sm text-zinc-800 resize-none focus:outline-none"
+              placeholder="Overall lesson description..."
+              className="w-full min-h-[120px] p-3.5 rounded-2xl bg-[#FAF6F0] border border-zinc-200/70 text-sm leading-relaxed text-zinc-800 resize-y focus:outline-none focus:ring-2 focus:ring-sky-500"
             />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Retrieval Starter Mapping */}
-              <div className="p-4 rounded-2xl bg-sky-50/70 border border-sky-200/80 space-y-2">
+              {/* Retrieval Starter */}
+              <div className="p-4 rounded-2xl bg-sky-50/70 border border-sky-200/80 space-y-2.5">
                 <p className="text-xs font-bold uppercase tracking-wider text-sky-900">
-                  4-Quadrant MWB Starter Retrieval Plan
+                  Starter
                 </p>
-                <ul className="text-xs text-sky-950 space-y-1">
-                  <li>
-                    <strong>Q1 (Last Lesson):</strong>{' '}
-                    {lesson.starterRetrievalFocus.q1LastLesson}
-                  </li>
-                  <li>
-                    <strong>Q2 (Last Week):</strong>{' '}
-                    {lesson.starterRetrievalFocus.q2LastWeek}
-                  </li>
-                  <li>
-                    <strong>Q3 (Earlier Topic):</strong>{' '}
-                    {lesson.starterRetrievalFocus.q3EarlierTopic}
-                  </li>
-                  <li>
-                    <strong>Q4 (Stretch Hook):</strong>{' '}
-                    {lesson.starterRetrievalFocus.q4Challenge}
-                  </li>
-                </ul>
+                <div className="space-y-2">
+                  {(
+                    [
+                      ['q1LastLesson', '1'],
+                      ['q2LastWeek', '2'],
+                      ['q3EarlierTopic', '3'],
+                      ['q4Challenge', '4'],
+                    ] as [keyof PlannedLesson['starterRetrievalFocus'], string][]
+                  ).map(([key, numLabel]) => (
+                    <div key={key} className="flex items-start gap-2">
+                      <span className="font-mono text-xs font-bold text-sky-700 mt-2 shrink-0 w-4">
+                        {numLabel}.
+                      </span>
+                      <textarea
+                        value={lesson.starterRetrievalFocus[key]}
+                        rows={2}
+                        onChange={(e) =>
+                          updateLessonField(lesson.id, {
+                            starterRetrievalFocus: {
+                              ...lesson.starterRetrievalFocus,
+                              [key]: e.target.value,
+                            },
+                          })
+                        }
+                        className="flex-1 text-xs text-sky-950 bg-white/70 border border-sky-200/70 rounded-xl px-2.5 py-1.5 leading-relaxed resize-y focus:outline-none focus:bg-white focus:ring-2 focus:ring-sky-400"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              {/* Active Non-Lecture Tasks */}
-              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-                  <Users size={13} /> Active Pupil Tasks (Non-Lecture)
-                </p>
-                <ul className="text-xs text-amber-950 space-y-1 list-disc list-inside">
+              {/* Pupil Activities */}
+              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                    <Users size={13} /> Activity
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateLessonField(lesson.id, {
+                        activeTaskTypes: [
+                          ...lesson.activeTaskTypes,
+                          '15 mins — New pupil activity...',
+                        ],
+                      })
+                    }
+                    className="p-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 transition"
+                    title="Add activity"
+                  >
+                    <Plus size={13} />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {lesson.activeTaskTypes.length === 0 && (
+                    <p className="text-xs text-amber-800/70 italic py-2">
+                      No activity set yet — click + to add one.
+                    </p>
+                  )}
                   {lesson.activeTaskTypes.map((task, idx) => (
-                    <li key={idx}>{task}</li>
+                    <div key={idx} className="flex items-start gap-2 group">
+                      <textarea
+                        value={task}
+                        rows={2}
+                        onChange={(e) =>
+                          updateLessonField(lesson.id, {
+                            activeTaskTypes: lesson.activeTaskTypes.map((item, i) =>
+                              i === idx ? e.target.value : item
+                            ),
+                          })
+                        }
+                        className="flex-1 text-xs text-amber-950 bg-white/75 border border-amber-200/80 rounded-xl px-2.5 py-1.5 leading-relaxed resize-y focus:outline-none focus:bg-white focus:ring-2 focus:ring-amber-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateLessonField(lesson.id, {
+                            activeTaskTypes: lesson.activeTaskTypes.filter(
+                              (_, i) => i !== idx
+                            ),
+                          })
+                        }
+                        className="mt-1.5 p-1 text-amber-700/60 hover:text-rose-600 transition"
+                        title="Remove activity"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
             </div>
 

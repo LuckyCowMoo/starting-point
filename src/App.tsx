@@ -177,6 +177,7 @@ export function App() {
       keyStage: folder?.keyStage || 'KS3 (Year 8)',
       lessonCount: 4,
       defaultLessonMinutes: 60,
+      priorUnitSummary: '',
       topicBrief: '',
       updatedAt: new Date().toISOString(),
       stage1Approved: false,

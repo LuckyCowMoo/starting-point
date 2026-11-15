@@ -20,6 +20,7 @@ import {
   LucideIcon,
   Move,
   Network,
+  PenLine,
   Plus,
   Scale,
   Search,
@@ -42,6 +43,8 @@ import {
   SlideMediaItem,
   SlideTableData,
   SlideTextBlock,
+  StarterQuadrant,
+  StarterQuadrantLayout,
 } from '../../types/curriculum';
 import { SlideTable } from './SlideTable';
 import { PHASE_PALETTES } from '../../data/palettes';
@@ -105,6 +108,16 @@ export function isMcOptionCorrect(
   return Boolean(cleanOpt && (cleanAns === cleanOpt || cleanAns.includes(cleanOpt)));
 }
 
+export function isTfOptionCorrect(isTrue: boolean, answer: string): boolean {
+  const trimmed = (answer || '').trim().toLowerCase();
+  if (!trimmed) return false;
+  if (isTrue) {
+    return trimmed.startsWith('a') || trimmed.startsWith('true') || trimmed.includes('true');
+  } else {
+    return trimmed.startsWith('b') || trimmed.startsWith('false') || trimmed.includes('false');
+  }
+}
+
 export function stripStarterMetaPrefix(question: string): string {
   return (question || '')
     .replace(
@@ -113,6 +126,26 @@ export function stripStarterMetaPrefix(question: string): string {
     )
     .replace(/^([a-z])/, (m) => m.toUpperCase())
     .trim();
+}
+
+export function getQuadrantLayout(q: StarterQuadrant): StarterQuadrantLayout {
+  if (q.layout) return q.layout;
+  const isTf =
+    q.options &&
+    q.options.length === 2 &&
+    (q.options[0].toLowerCase().trim() === 'true' ||
+      q.options[0].toLowerCase().trim() === 'false' ||
+      q.options[1].toLowerCase().trim() === 'false' ||
+      q.options[1].toLowerCase().trim() === 'true');
+  if (isTf) return 'true-false';
+  const hasImg = Boolean(q.imageUrl || q.svgCode);
+  if (hasImg) {
+    return q.options && q.options.length > 0 ? 'identify-picture-mc' : 'identify-picture-open';
+  }
+  if (q.options && q.options.length > 0) {
+    return 'multiple-choice';
+  }
+  return 'open-ended';
 }
 
 const GENERIC_META_HEADINGS = new Set([
@@ -2419,6 +2452,45 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
 
     if (slide.presetId === 'mwb-starter-quadrant') {
       const quads = slide.starterQuadrants || [];
+
+      const handleSetQuadrantLayout = (idx: number, nextLayout: StarterQuadrantLayout) => {
+        const target = quads[idx];
+        if (!target) return;
+
+        let newOptions = target.options;
+        let newAnswer = target.answer;
+
+        if (nextLayout === 'true-false') {
+          newOptions = ['True', 'False'];
+          if (!newAnswer || (!newAnswer.toLowerCase().includes('true') && !newAnswer.toLowerCase().includes('false'))) {
+            newAnswer = 'A — True';
+          }
+        } else if (nextLayout === 'multiple-choice' || nextLayout === 'identify-picture-mc') {
+          if (!newOptions || newOptions.length < 4 || (newOptions.length === 2 && newOptions[0].toLowerCase().includes('true'))) {
+            newOptions = ['Option A', 'Option B', 'Option C', 'Option D'];
+            newAnswer = 'A — Option A';
+          }
+        } else if (nextLayout === 'open-ended' || nextLayout === 'identify-picture-open') {
+          newOptions = undefined;
+          if (newAnswer && newAnswer.match(/^[A-D]\s*[—:-]\s*/)) {
+            newAnswer = newAnswer.replace(/^[A-D]\s*[—:-]\s*/, '');
+          }
+        }
+
+        const updated = quads.map((item, i) =>
+          i === idx
+            ? {
+                ...item,
+                layout: nextLayout,
+                options: newOptions,
+                answer: newAnswer,
+              }
+            : item
+        );
+
+        onUpdateSlide?.({ starterQuadrants: updated });
+      };
+
       return (
         <div
           className={`relative z-20 flex-1 flex flex-col pt-6 min-h-0 overflow-hidden ${
@@ -2438,49 +2510,39 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               const revealed = editorPreviewAllAnswers || idx < starterRevealedCount;
               const cleanQuestion = stripStarterMetaPrefix(q.question);
               const qLen = cleanQuestion.length;
+              const layout = getQuadrantLayout(q);
+              const isPictureLayout = layout === 'identify-picture-mc' || layout === 'identify-picture-open';
+              const isTfLayout = layout === 'true-false';
+              const isOpenLayout = layout === 'open-ended';
+
               const qTextClass =
-                qLen > 125
+                isPictureLayout
+                  ? qLen > 80
+                    ? 'text-[21px] leading-[1.2]'
+                    : 'text-[24px] leading-[1.22]'
+                  : qLen > 125
                   ? 'text-[23px] leading-[1.18]'
                   : qLen > 85
                   ? 'text-[26px] leading-[1.2]'
                   : 'text-[29px] leading-[1.22]';
+
               const hasMcOptions = Boolean(q.options && q.options.length > 0);
               const maxOptLen = hasMcOptions
                 ? Math.max(...q.options!.map((o) => o.length))
                 : 0;
               const optTextClass =
-                maxOptLen > 34
+                isPictureLayout
+                  ? 'text-[19px] leading-tight py-1.5 px-3'
+                  : maxOptLen > 34
                   ? 'text-[20px] leading-tight py-1.5 px-3'
                   : 'text-[23px] leading-snug py-2 px-3.5';
 
-              const quadNode = (
-                <div
-                  className={`flex flex-col justify-between gap-2.5 min-h-0 h-full overflow-hidden ${
-                    quadBoxed
-                      ? `rounded-3xl border-2 px-6 py-4 shadow-md ${
-                          quadOnDark
-                            ? 'bg-white/14 backdrop-blur-md border-white/30'
-                            : 'bg-white/95'
-                        }`
-                      : hideWaveBackground
-                      ? 'rounded-2xl border-2 border-dashed border-slate-300 px-5 py-3.5 bg-white/60'
-                      : 'px-2 py-2'
-                  }`}
-                  style={
-                    quadBoxed && !quadOnDark
-                      ? {
-                          borderColor: neutralBorder,
-                          borderTopColor: neutralBorder,
-                          borderRightColor: neutralBorder,
-                          borderBottomColor: neutralBorder,
-                          borderLeftColor: neutralBorder,
-                        }
-                      : undefined
-                  }
-                >
-                  <div className="flex items-start gap-3.5 shrink-0">
+              // Header of quadrant: number badge, question text, and layout switch select
+              const quadrantHeader = (
+                <div className="flex items-start justify-between gap-3 shrink-0">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
                     <span
-                      className="w-11 h-11 rounded-2xl flex items-center justify-center font-extrabold text-[27px] shrink-0"
+                      className="w-10 h-10 rounded-2xl flex items-center justify-center font-extrabold text-[25px] shrink-0"
                       style={{
                         backgroundColor: quadOnDark ? '#FFFFFF' : neutralAccent,
                         color: quadOnDark ? palette.layers[3] : '#FFFFFF',
@@ -2509,121 +2571,226 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                     </div>
                   </div>
 
-                  {hasMcOptions ? (
-                    <div className="grid grid-cols-2 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-x-4 gap-y-2 pl-[56px] flex-1 min-h-0">
-                      {q.options!.slice(0, 4).map((opt, oi) => {
-                        const letter = String.fromCharCode(65 + oi);
-                        const cleanOptText = opt.replace(/^[A-D][\s.):\-]+/i, '');
-                        const isCorrect = isMcOptionCorrect(opt, oi, q.answer);
-
-                        let pillClass = quadOnDark
-                          ? 'text-white hover:bg-white/10'
-                          : 'text-zinc-900 hover:bg-black/5';
-                        let badgeClass = '';
-                        let badgeStyle: React.CSSProperties = {
-                          color: quadOnDark ? '#FFFFFF' : neutralAccent,
-                        };
-
-                        if (revealed) {
-                          if (isCorrect) {
-                            pillClass =
-                              'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400/30';
-                            badgeClass = 'bg-white/20 text-white px-2 py-0.5 rounded-lg';
-                            badgeStyle = { color: '#FFFFFF' };
-                          } else {
-                            pillClass = quadOnDark
-                              ? 'text-white/35 opacity-40'
-                              : 'text-zinc-400 opacity-45';
-                            badgeStyle = {
-                              color: quadOnDark ? 'rgba(255,255,255,0.4)' : '#94A3B8',
-                            };
-                          }
-                        }
-
-                        return (
-                          <div
-                            key={oi}
-                            className={`rounded-xl font-bold flex items-center gap-2.5 min-h-0 overflow-hidden transition-all ${optTextClass} ${pillClass}`}
-                          >
-                            <button
-                              type="button"
-                              disabled={!editable || isThumbnail}
-                              title={
-                                editable && !isThumbnail
-                                  ? `Click to mark ${letter} as correct answer`
-                                  : undefined
-                              }
-                              onClick={(e) => {
-                                if (editable && !isThumbnail) {
-                                  e.stopPropagation();
-                                  onUpdateSlide?.({
-                                    starterQuadrants: quads.map((item) =>
-                                      item.id === q.id
-                                        ? { ...item, answer: `${letter} — ${cleanOptText}` }
-                                        : item
-                                    ),
-                                  });
-                                }
-                              }}
-                              className={`shrink-0 font-extrabold ${badgeClass} ${
-                                editable && !isThumbnail
-                                  ? 'cursor-pointer hover:underline'
-                                  : 'cursor-default'
-                              }`}
-                              style={badgeStyle}
-                            >
-                              {letter}.
-                            </button>
-                            <span className="flex-1 min-w-0 line-clamp-2">
-                              <InlineEditableText
-                                value={cleanOptText}
-                                editable={editable && !isThumbnail}
-                                onCommit={(next) => {
-                                  const updated = q.options!.map((o, k) =>
-                                    k === oi ? `${letter}. ${next}` : o
-                                  );
-                                  onUpdateSlide?.({
-                                    starterQuadrants: quads.map((item) =>
-                                      item.id === q.id
-                                        ? {
-                                            ...item,
-                                            options: updated as [
-                                              string,
-                                              string,
-                                              string,
-                                              string,
-                                            ],
-                                            answer: isCorrect
-                                              ? `${letter} — ${next}`
-                                              : item.answer,
-                                          }
-                                        : item
-                                    ),
-                                  });
-                                }}
-                              />
-                            </span>
-                            {revealed && isCorrect && (
-                              <Check size={24} strokeWidth={3} className="shrink-0 text-white" />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    /* Open-question fallback reveal strip */
-                    <div
-                      className={`h-[64px] rounded-xl px-5 mt-2 flex items-center transition-all shrink-0 ${
-                        revealed
-                          ? 'bg-emerald-600 text-white shadow-md'
-                          : 'border-b-2 border-dashed border-zinc-400/50'
-                      }`}
+                  {editable && !isThumbnail && (
+                    <select
+                      value={layout}
+                      data-no-drag="true"
+                      title="Change quadrant layout"
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleSetQuadrantLayout(idx, e.target.value as StarterQuadrantLayout);
+                      }}
+                      className="shrink-0 text-[12px] font-bold py-1 px-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-300 shadow-xs outline-none cursor-pointer"
                     >
-                      {revealed ? (
-                        <p className="text-[28px] font-extrabold leading-tight truncate w-full text-white">
+                      <option value="multiple-choice">Multiple Choice</option>
+                      <option value="true-false">True / False</option>
+                      <option value="identify-picture-mc">Picture + MC</option>
+                      <option value="identify-picture-open">Picture + Open</option>
+                      <option value="open-ended">Open Question</option>
+                    </select>
+                  )}
+                </div>
+              );
+
+              // Multiple-Choice Grid
+              const renderMcGrid = (colCount = 2, extraLeftPadding = 'pl-[52px]') => (
+                <div
+                  className={`grid ${
+                    colCount === 1 ? 'grid-cols-1 gap-y-1.5' : 'grid-cols-2 gap-x-3 gap-y-1.5'
+                  } ${extraLeftPadding} flex-1 min-h-0 content-center`}
+                >
+                  {(q.options || ['Option A', 'Option B', 'Option C', 'Option D']).slice(0, 4).map((opt, oi) => {
+                    const letter = String.fromCharCode(65 + oi);
+                    const cleanOptText = opt.replace(/^[A-D][\s.):\-]+/i, '');
+                    const isCorrect = isMcOptionCorrect(opt, oi, q.answer);
+
+                    let pillClass = quadOnDark
+                      ? 'text-white hover:bg-white/10'
+                      : 'text-zinc-900 hover:bg-black/5';
+                    let badgeClass = '';
+                    let badgeStyle: React.CSSProperties = {
+                      color: quadOnDark ? '#FFFFFF' : neutralAccent,
+                    };
+
+                    if (revealed) {
+                      if (isCorrect) {
+                        pillClass =
+                          'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400/30';
+                        badgeClass = 'bg-white/20 text-white px-2 py-0.5 rounded-lg';
+                        badgeStyle = { color: '#FFFFFF' };
+                      } else {
+                        pillClass = quadOnDark
+                          ? 'text-white/35 opacity-40'
+                          : 'text-zinc-400 opacity-45';
+                        badgeStyle = {
+                          color: quadOnDark ? 'rgba(255,255,255,0.4)' : '#94A3B8',
+                        };
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={oi}
+                        className={`rounded-xl font-bold flex items-center gap-2 min-h-0 overflow-hidden transition-all ${optTextClass} ${pillClass}`}
+                      >
+                        <button
+                          type="button"
+                          disabled={!editable || isThumbnail}
+                          title={
+                            editable && !isThumbnail
+                              ? `Click to mark ${letter} as correct answer`
+                              : undefined
+                          }
+                          onClick={(e) => {
+                            if (editable && !isThumbnail) {
+                              e.stopPropagation();
+                              onUpdateSlide?.({
+                                starterQuadrants: quads.map((item) =>
+                                  item.id === q.id
+                                    ? { ...item, answer: `${letter} — ${cleanOptText}` }
+                                    : item
+                                ),
+                              });
+                            }
+                          }}
+                          className={`shrink-0 font-extrabold ${badgeClass} ${
+                            editable && !isThumbnail
+                              ? 'cursor-pointer hover:underline'
+                              : 'cursor-default'
+                          }`}
+                          style={badgeStyle}
+                        >
+                          {letter}.
+                        </button>
+                        <span className="flex-1 min-w-0 line-clamp-2">
+                          <InlineEditableText
+                            value={cleanOptText}
+                            editable={editable && !isThumbnail}
+                            onCommit={(next) => {
+                              const updated = (q.options || []).map((o, k) =>
+                                k === oi ? `${letter}. ${next}` : o
+                              );
+                              onUpdateSlide?.({
+                                starterQuadrants: quads.map((item) =>
+                                  item.id === q.id
+                                    ? {
+                                        ...item,
+                                        options: updated,
+                                        answer: isCorrect
+                                          ? `${letter} — ${next}`
+                                          : item.answer,
+                                      }
+                                    : item
+                                ),
+                              });
+                            }}
+                          />
+                        </span>
+                        {revealed && isCorrect && (
+                          <Check size={22} strokeWidth={3} className="shrink-0 text-white" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+
+              // True / False Chooser
+              const renderTfChoices = () => (
+                <div className="flex flex-col gap-2 pl-[52px] flex-1 justify-center min-h-0">
+                  <div className="flex items-center gap-4">
+                    {['True', 'False'].map((tfVal, tfIdx) => {
+                      const isThisTrue = tfVal === 'True';
+                      const isCorrect = isTfOptionCorrect(isThisTrue, q.answer);
+                      const letter = tfIdx === 0 ? 'A' : 'B';
+
+                      let btnClass = quadOnDark
+                        ? 'bg-white/10 text-white hover:bg-white/20 border-white/20'
+                        : 'bg-zinc-100 text-zinc-800 hover:bg-zinc-200 border-zinc-200';
+
+                      if (revealed) {
+                        if (isCorrect) {
+                          btnClass =
+                            'bg-emerald-600 text-white border-emerald-500 shadow-md ring-2 ring-emerald-400/40';
+                        } else {
+                          btnClass = quadOnDark
+                            ? 'bg-white/5 text-white/30 border-transparent opacity-40'
+                            : 'bg-zinc-100/60 text-zinc-400 border-transparent opacity-40';
+                        }
+                      }
+
+                      return (
+                        <button
+                          key={tfVal}
+                          type="button"
+                          disabled={!editable || isThumbnail}
+                          title={
+                            editable && !isThumbnail
+                              ? `Click to set ${tfVal} as correct answer`
+                              : undefined
+                          }
+                          onClick={(e) => {
+                            if (editable && !isThumbnail) {
+                              e.stopPropagation();
+                              onUpdateSlide?.({
+                                starterQuadrants: quads.map((item) =>
+                                  item.id === q.id
+                                    ? { ...item, answer: `${letter} — ${tfVal}` }
+                                    : item
+                                ),
+                              });
+                            }
+                          }}
+                          className={`flex-1 py-3 px-5 rounded-2xl border-2 font-black text-[25px] flex items-center justify-center gap-3 transition ${btnClass} ${
+                            editable && !isThumbnail ? 'cursor-pointer' : 'cursor-default'
+                          }`}
+                        >
+                          <span className="opacity-70 text-[20px] font-bold">{letter}.</span>
+                          <span>{tfVal}</span>
+                          {revealed && isCorrect && (
+                            <Check size={26} strokeWidth={3.5} className="text-white shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {revealed && q.answer && q.answer.includes('—') && (
+                    <div className="rounded-xl px-4 py-2 bg-emerald-50 text-emerald-950 border border-emerald-200 text-[18px] font-bold flex items-center gap-2">
+                      <span className="text-emerald-700">Why:</span>
+                      <InlineEditableText
+                        value={q.answer.replace(/^[A-B]\s*—\s*(?:True|False)\s*[—:]\s*/i, '')}
+                        editable={editable && !isThumbnail}
+                        onCommit={(next) => {
+                          const isTrue = isTfOptionCorrect(true, q.answer);
+                          const prefix = isTrue ? 'A — True — ' : 'B — False — ';
+                          onUpdateSlide?.({
+                            starterQuadrants: quads.map((item) =>
+                              item.id === q.id ? { ...item, answer: `${prefix}${next}` } : item
+                            ),
+                          });
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+
+              // Open-ended Whiteboard Space / Reveal Banner
+              const renderOpenEnded = (extraLeftPadding = 'pl-[52px]') => (
+                <div className={`flex flex-col flex-1 justify-center min-h-0 ${extraLeftPadding}`}>
+                  {revealed ? (
+                    <div className="rounded-2xl bg-emerald-600 text-white px-5 py-3 shadow-md flex items-center gap-3">
+                      <Check size={28} strokeWidth={3} className="shrink-0 text-white" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[12px] uppercase font-bold tracking-wider text-emerald-100 block">
+                          Model Answer
+                        </span>
+                        <p className="text-[24px] font-black leading-tight text-white">
                           <InlineEditableText
                             value={q.answer}
                             editable={editable && !isThumbnail}
+                            multiline
                             onCommit={(next) =>
                               onUpdateSlide?.({
                                 starterQuadrants: quads.map((item) =>
@@ -2633,10 +2800,115 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                             }
                           />
                         </p>
-                      ) : (
-                        <span className="sr-only">Open answer space</span>
-                      )}
+                      </div>
                     </div>
+                  ) : (
+                    <div className="h-full min-h-[78px] rounded-2xl border-2 border-dashed border-zinc-300 bg-zinc-50/70 flex items-center justify-center gap-3 px-5 py-3 text-zinc-500">
+                      <PenLine size={24} className="text-zinc-400" />
+                      <span className="text-[21px] font-bold">Write response on Mini-Whiteboard</span>
+                    </div>
+                  )}
+                </div>
+              );
+
+              // Image Box for Identify-Picture Layouts
+              const renderPictureBox = () => (
+                <div
+                  data-slot-id={`quad-media-${idx}`}
+                  className={`w-[220px] shrink-0 h-full max-h-[220px] rounded-2xl border-2 overflow-hidden relative flex flex-col items-center justify-center cursor-pointer group transition ${
+                    q.imageUrl || q.svgCode
+                      ? 'bg-white border-zinc-200 hover:border-emerald-500 shadow-xs'
+                      : 'bg-zinc-100/90 border-dashed border-zinc-300 hover:border-emerald-500 hover:bg-zinc-50'
+                  }`}
+                  onMouseEnter={() => {
+                    if (editable && !isThumbnail) onHoverImageTarget?.(`quad-media-${idx}`);
+                  }}
+                  onMouseLeave={() => {
+                    if (editable && !isThumbnail) onHoverImageTarget?.(null);
+                  }}
+                  onClick={(e) => {
+                    if (editable && !isThumbnail) {
+                      e.stopPropagation();
+                      onOpenMediaPicker?.(`quad-media-${idx}`);
+                    }
+                  }}
+                >
+                  {q.svgCode ? (
+                    <div
+                      className="w-full h-full p-2 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-h-[190px] [&>svg]:object-contain"
+                      dangerouslySetInnerHTML={{ __html: q.svgCode }}
+                    />
+                  ) : q.imageUrl ? (
+                    <img
+                      src={q.imageUrl}
+                      alt={cleanQuestion}
+                      className="w-full h-full object-contain p-1.5 rounded-xl"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1.5 p-3 text-center text-zinc-500 group-hover:text-emerald-700">
+                      <ImagePlus size={36} className="text-zinc-400 group-hover:text-emerald-600 transition" />
+                      <span className="text-[14px] font-bold leading-tight">
+                        {editable && !isThumbnail ? 'Click or Ctrl+V' : 'Visual Diagram'}
+                      </span>
+                      <span className="text-[11px] font-medium text-zinc-400">
+                        Diagram / Picture
+                      </span>
+                    </div>
+                  )}
+
+                  {editable && !isThumbnail && (q.imageUrl || q.svgCode) && (
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-zinc-900/90 text-white px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 shadow-md transition">
+                      <ImagePlus size={12} />
+                      <span>Change</span>
+                    </div>
+                  )}
+                </div>
+              );
+
+              const quadNode = (
+                <div
+                  className={`flex flex-col justify-between gap-2.5 min-h-0 h-full overflow-hidden ${
+                    quadBoxed
+                      ? `rounded-3xl border-2 px-6 py-4 shadow-md ${
+                          quadOnDark
+                            ? 'bg-white/14 backdrop-blur-md border-white/30'
+                            : 'bg-white/95'
+                        }`
+                      : hideWaveBackground
+                      ? 'rounded-2xl border-2 border-dashed border-slate-300 px-5 py-3.5 bg-white/60'
+                      : 'px-2 py-2'
+                  }`}
+                  style={
+                    quadBoxed && !quadOnDark
+                      ? {
+                          borderColor: neutralBorder,
+                          borderTopColor: neutralBorder,
+                          borderRightColor: neutralBorder,
+                          borderBottomColor: neutralBorder,
+                          borderLeftColor: neutralBorder,
+                        }
+                      : undefined
+                  }
+                >
+                  {isPictureLayout ? (
+                    <div className="flex items-stretch gap-4 flex-1 min-h-0">
+                      {renderPictureBox()}
+                      <div className="flex-1 flex flex-col justify-between gap-2 min-w-0 min-h-0">
+                        {quadrantHeader}
+                        {layout === 'identify-picture-mc'
+                          ? renderMcGrid(2, 'pl-0')
+                          : renderOpenEnded('pl-0')}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {quadrantHeader}
+                      {isTfLayout
+                        ? renderTfChoices()
+                        : isOpenLayout
+                        ? renderOpenEnded()
+                        : renderMcGrid()}
+                    </>
                   )}
                 </div>
               );

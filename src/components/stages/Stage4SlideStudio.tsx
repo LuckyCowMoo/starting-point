@@ -9,6 +9,7 @@ import {
   EyeOff,
   FlipHorizontal2,
   Image as ImageIcon,
+  ImagePlus,
   Loader2,
   Lock,
   Maximize2,
@@ -46,6 +47,7 @@ import {
   SlidePresetId,
   SlideTableData,
   SlideTextBlock,
+  StarterQuadrantLayout,
   WaveVariant,
 } from '../../types/curriculum';
 import {
@@ -54,7 +56,12 @@ import {
   SLIDE_PRESETS,
   WAVE_VARIANT_LABELS,
 } from '../../data/palettes';
-import { SlideCanvas } from '../canvas/SlideCanvas';
+import {
+  SlideCanvas,
+  getQuadrantLayout,
+  isMcOptionCorrect,
+  isTfOptionCorrect,
+} from '../canvas/SlideCanvas';
 import { SVG_DIAGRAM_TEMPLATES } from '../../data/svgDiagramLibrary';
 import { RoutineBadgeIcon } from '../canvas/RoutineBadgeIcon';
 import { MediaPickerModal } from '../media/MediaPickerModal';
@@ -193,7 +200,25 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
 
   const applyPastedImage = (targetId: string, data: string, type: 'image' | 'svg') => {
     recordManualHistory();
-    if (targetId.startsWith('vocab-media-')) {
+    if (targetId.startsWith('quad-media-')) {
+      const idx = parseInt(targetId.replace('quad-media-', ''), 10);
+      const currentQuads = slide.starterQuadrants || [];
+      if (currentQuads[idx]) {
+        updateActiveSlide({
+          starterQuadrants: currentQuads.map((q, i) =>
+            i === idx
+              ? {
+                  ...q,
+                  imageUrl: type === 'image' ? data : undefined,
+                  svgCode: type === 'svg' ? data : undefined,
+                }
+              : q
+          ),
+        });
+        showPasteToast(`Pasted image into Starter Quadrant ${idx + 1}!`);
+      }
+      return;
+    } else if (targetId.startsWith('vocab-media-')) {
       const idx = parseInt(targetId.replace('vocab-media-', ''), 10);
       const currentTerms = slide.keyTermsStrip || [];
       if (currentTerms[idx]) {
@@ -2067,101 +2092,280 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                     <label className="font-bold text-zinc-500 uppercase tracking-wider text-[10px]">
                       4-Quadrant MWB Questions & Answers
                     </label>
-                    {slide.starterQuadrants.map((q, idx) => (
-                      <div
-                        key={q.id}
-                        className="p-2.5 rounded-xl bg-[#FAF6F0] border border-zinc-200 space-y-1.5"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-sky-700 text-white text-[11px] font-bold">
-                            {idx + 1}
-                          </span>
-                          <button
-                            onClick={() =>
+                    {slide.starterQuadrants.map((q, idx) => {
+                      const qLayout = getQuadrantLayout(q);
+                      const isPic = qLayout === 'identify-picture-mc' || qLayout === 'identify-picture-open';
+                      const isTf = qLayout === 'true-false';
+                      const isMc = qLayout === 'multiple-choice' || qLayout === 'identify-picture-mc';
+
+                      return (
+                        <div
+                          key={q.id}
+                          className="p-2.5 rounded-xl bg-[#FAF6F0] border border-zinc-200 space-y-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-sky-700 text-white text-[11px] font-bold">
+                              {idx + 1}
+                            </span>
+                            <select
+                              value={qLayout}
+                              onChange={(e) => {
+                                const nextLayout = e.target.value as StarterQuadrantLayout;
+                                const quads = slide.starterQuadrants || [];
+                                let newOptions = q.options;
+                                let newAnswer = q.answer;
+                                if (nextLayout === 'true-false') {
+                                  newOptions = ['True', 'False'];
+                                  if (!newAnswer || (!newAnswer.toLowerCase().includes('true') && !newAnswer.toLowerCase().includes('false'))) {
+                                    newAnswer = 'A — True';
+                                  }
+                                } else if (nextLayout === 'multiple-choice' || nextLayout === 'identify-picture-mc') {
+                                  if (!newOptions || newOptions.length < 4 || (newOptions.length === 2 && newOptions[0].toLowerCase().includes('true'))) {
+                                    newOptions = ['Option A', 'Option B', 'Option C', 'Option D'];
+                                    newAnswer = 'A — Option A';
+                                  }
+                                } else if (nextLayout === 'open-ended' || nextLayout === 'identify-picture-open') {
+                                  newOptions = undefined;
+                                  if (newAnswer && newAnswer.match(/^[A-D]\s*[—:-]\s*/)) {
+                                    newAnswer = newAnswer.replace(/^[A-D]\s*[—:-]\s*/, '');
+                                  }
+                                }
+                                updateActiveSlide({
+                                  starterQuadrants: quads.map((item, i) =>
+                                    i === idx
+                                      ? {
+                                          ...item,
+                                          layout: nextLayout,
+                                          options: newOptions,
+                                          answer: newAnswer,
+                                        }
+                                      : item
+                                  ),
+                                });
+                              }}
+                              className="text-[11px] font-bold px-2 py-0.5 rounded-md border border-zinc-300 bg-white text-zinc-700 outline-none"
+                            >
+                              <option value="multiple-choice">Multiple Choice (4)</option>
+                              <option value="true-false">True / False</option>
+                              <option value="identify-picture-mc">Picture + MC</option>
+                              <option value="identify-picture-open">Picture + Open</option>
+                              <option value="open-ended">Open Question (No MC)</option>
+                            </select>
+                          </div>
+
+                          {/* Image controls for picture layouts */}
+                          {isPic && (
+                            <div className="flex items-center gap-2 p-1.5 rounded-lg bg-white border border-zinc-200">
+                              {q.imageUrl || q.svgCode ? (
+                                <>
+                                  <div className="w-10 h-10 rounded border border-zinc-200 overflow-hidden shrink-0 flex items-center justify-center bg-zinc-50">
+                                    {q.svgCode ? (
+                                      <div
+                                        className="w-full h-full p-0.5 [&>svg]:w-full [&>svg]:h-full object-contain"
+                                        dangerouslySetInnerHTML={{ __html: q.svgCode }}
+                                      />
+                                    ) : (
+                                      <img
+                                        src={q.imageUrl}
+                                        alt={q.question}
+                                        className="w-full h-full object-contain"
+                                      />
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[10px] font-bold text-zinc-600 truncate">Image attached</p>
+                                    <p className="text-[9px] text-zinc-400">Ctrl+V on slide to replace</p>
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      setMediaTargetElementId(`quad-media-${idx}`);
+                                      setMediaOpen(true);
+                                    }}
+                                    className="text-[10px] font-bold px-2 py-1 rounded bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
+                                  >
+                                    Change
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      updateActiveSlide({
+                                        starterQuadrants: slide.starterQuadrants?.map((item, i) =>
+                                          i === idx
+                                            ? { ...item, imageUrl: undefined, svgCode: undefined }
+                                            : item
+                                        ),
+                                      })
+                                    }
+                                    className="text-[10px] font-bold px-1.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-600"
+                                  >
+                                    Remove
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setMediaTargetElementId(`quad-media-${idx}`);
+                                    setMediaOpen(true);
+                                  }}
+                                  className="w-full py-1.5 px-2 rounded border border-dashed border-zinc-300 text-[11px] font-bold text-zinc-600 hover:text-emerald-700 hover:border-emerald-500 bg-zinc-50/50 flex items-center justify-center gap-1.5"
+                                >
+                                  <ImagePlus size={14} />
+                                  <span>Choose or Paste Diagram / Picture</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          <textarea
+                            value={q.question}
+                            rows={2}
+                            onChange={(e) =>
                               updateActiveSlide({
                                 starterQuadrants: slide.starterQuadrants?.map(
                                   (item, i) =>
                                     i === idx
-                                      ? {
-                                          ...item,
-                                          options: item.options
-                                            ? undefined
-                                            : ['Option 1', 'Option 2', 'Option 3', 'Option 4'],
-                                        }
+                                      ? { ...item, question: e.target.value }
                                       : item
                                 ),
                               })
                             }
-                            className="text-[10px] font-bold px-2 py-0.5 rounded-md border border-zinc-300 bg-white hover:bg-zinc-100 text-zinc-700"
-                          >
-                            {q.options ? 'Switch to Open Q' : '+ Add A/B/C/D Choices'}
-                          </button>
-                        </div>
-                        <textarea
-                          value={q.question}
-                          rows={2}
-                          onChange={(e) =>
-                            updateActiveSlide({
-                              starterQuadrants: slide.starterQuadrants?.map(
-                                (item, i) =>
-                                  i === idx
-                                    ? { ...item, question: e.target.value }
-                                    : item
-                              ),
-                            })
-                          }
-                          className="w-full p-1.5 rounded-lg border border-zinc-200 bg-white font-semibold"
-                        />
-                        {q.options && (
-                          <div className="grid grid-cols-2 gap-1">
-                            {q.options.map((opt, optIdx) => (
-                              <div
-                                key={optIdx}
-                                className="flex items-center gap-1 rounded border border-zinc-200 bg-white px-1.5 py-0.5"
-                              >
-                                <span className="text-[10px] font-extrabold text-sky-700 shrink-0">
-                                  {['A', 'B', 'C', 'D'][optIdx]}
-                                </span>
-                                <input
-                                  value={opt}
-                                  onChange={(e) => {
-                                    const nextOpts = [...q.options!] as [
-                                      string,
-                                      string,
-                                      string,
-                                      string,
-                                    ];
-                                    nextOpts[optIdx] = e.target.value;
-                                    updateActiveSlide({
-                                      starterQuadrants: slide.starterQuadrants?.map(
-                                        (item, i) =>
-                                          i === idx ? { ...item, options: nextOpts } : item
-                                      ),
-                                    });
-                                  }}
-                                  className="w-full py-0.5 bg-transparent text-[10.5px] font-medium text-zinc-700 outline-none"
-                                />
+                            placeholder="Question or statement..."
+                            className="w-full p-1.5 rounded-lg border border-zinc-200 bg-white font-semibold text-xs"
+                          />
+
+                          {/* True / False Choice Toggles */}
+                          {isTf && (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-2">
+                                {['True', 'False'].map((tfVal, tfIdx) => {
+                                  const letter = tfIdx === 0 ? 'A' : 'B';
+                                  const isSelected = isTfOptionCorrect(tfVal === 'True', q.answer);
+                                  return (
+                                    <button
+                                      key={tfVal}
+                                      type="button"
+                                      onClick={() => {
+                                        const cleanWhy = q.answer.includes('—')
+                                          ? q.answer.replace(/^[A-B]\s*—\s*(?:True|False)\s*[—:]\s*/i, '')
+                                          : '';
+                                        const nextAns = cleanWhy
+                                          ? `${letter} — ${tfVal} — ${cleanWhy}`
+                                          : `${letter} — ${tfVal}`;
+                                        updateActiveSlide({
+                                          starterQuadrants: slide.starterQuadrants?.map((item, i) =>
+                                            i === idx ? { ...item, answer: nextAns } : item
+                                          ),
+                                        });
+                                      }}
+                                      className={`flex-1 py-1 px-2.5 rounded-lg border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                                        isSelected
+                                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                          : 'bg-white text-zinc-700 border-zinc-300 hover:bg-zinc-50'
+                                      }`}
+                                    >
+                                      <span>{letter}. {tfVal}</span>
+                                      {isSelected && <Check size={12} strokeWidth={3} />}
+                                    </button>
+                                  );
+                                })}
                               </div>
-                            ))}
-                          </div>
-                        )}
-                        <input
-                          value={q.answer}
-                          onChange={(e) =>
-                            updateActiveSlide({
-                              starterQuadrants: slide.starterQuadrants?.map(
-                                (item, i) =>
-                                  i === idx
-                                    ? { ...item, answer: e.target.value }
-                                    : item
-                              ),
-                            })
-                          }
-                          placeholder="Short answer (e.g. B — 1101)..."
-                          className="w-full p-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-950 font-semibold"
-                        />
-                      </div>
-                    ))}
+                              <input
+                                value={q.answer.replace(/^[A-B]\s*—\s*(?:True|False)\s*[—:]\s*/i, '')}
+                                onChange={(e) => {
+                                  const isTrue = isTfOptionCorrect(true, q.answer);
+                                  const prefix = isTrue ? 'A — True — ' : 'B — False — ';
+                                  updateActiveSlide({
+                                    starterQuadrants: slide.starterQuadrants?.map((item, i) =>
+                                      i === idx ? { ...item, answer: `${prefix}${e.target.value}` } : item
+                                    ),
+                                  });
+                                }}
+                                placeholder="Why (optional explanation)..."
+                                className="w-full p-1 rounded-md border border-zinc-200 bg-white text-[11px]"
+                              />
+                            </div>
+                          )}
+
+                          {/* Multiple Choice Options */}
+                          {isMc && q.options && (
+                            <div className="grid grid-cols-2 gap-1">
+                              {q.options.slice(0, 4).map((opt, optIdx) => {
+                                const letter = ['A', 'B', 'C', 'D'][optIdx];
+                                const isCorrect = isMcOptionCorrect(opt, optIdx, q.answer);
+                                return (
+                                  <div
+                                    key={optIdx}
+                                    className={`flex items-center gap-1 rounded border px-1.5 py-0.5 ${
+                                      isCorrect
+                                        ? 'bg-emerald-50 border-emerald-400'
+                                        : 'bg-white border-zinc-200'
+                                    }`}
+                                  >
+                                    <button
+                                      type="button"
+                                      title={`Mark ${letter} as correct answer`}
+                                      onClick={() => {
+                                        updateActiveSlide({
+                                          starterQuadrants: slide.starterQuadrants?.map((item, i) =>
+                                            i === idx
+                                              ? { ...item, answer: `${letter} — ${opt.replace(/^[A-D][\s.):\-]+/i, '')}` }
+                                              : item
+                                          ),
+                                        });
+                                      }}
+                                      className={`text-[10px] font-extrabold shrink-0 hover:underline cursor-pointer ${
+                                        isCorrect ? 'text-emerald-700' : 'text-sky-700'
+                                      }`}
+                                    >
+                                      {letter}.
+                                    </button>
+                                    <input
+                                      value={opt.replace(/^[A-D][\s.):\-]+/i, '')}
+                                      onChange={(e) => {
+                                        const nextOpts = [...(q.options || [])];
+                                        nextOpts[optIdx] = `${letter}. ${e.target.value}`;
+                                        updateActiveSlide({
+                                          starterQuadrants: slide.starterQuadrants?.map((item, i) =>
+                                            i === idx
+                                              ? {
+                                                  ...item,
+                                                  options: nextOpts,
+                                                  answer: isCorrect
+                                                    ? `${letter} — ${e.target.value}`
+                                                    : item.answer,
+                                                }
+                                              : item
+                                          ),
+                                        });
+                                      }}
+                                      className="w-full py-0.5 bg-transparent text-[10.5px] font-medium text-zinc-700 outline-none"
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Reveal Answer / Model Answer Input */}
+                          {!isTf && (
+                            <input
+                              value={q.answer}
+                              onChange={(e) =>
+                                updateActiveSlide({
+                                  starterQuadrants: slide.starterQuadrants?.map(
+                                    (item, i) =>
+                                      i === idx
+                                        ? { ...item, answer: e.target.value }
+                                        : item
+                                  ),
+                                })
+                              }
+                              placeholder={isMc ? 'Correct answer (e.g. B — 1101)...' : 'Model answer for whiteboard reveal...'}
+                              className="w-full p-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-950 font-semibold text-xs"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="space-y-2.5 border-t border-zinc-200 pt-3">
@@ -2378,7 +2582,22 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
       <MediaPickerModal
         isOpen={mediaOpen}
         currentMedia={
-          mediaTargetElementId?.startsWith('vocab-media-')
+          mediaTargetElementId?.startsWith('quad-media-')
+            ? (() => {
+                const idx = parseInt(mediaTargetElementId.replace('quad-media-', ''), 10);
+                const q = slide.starterQuadrants?.[idx];
+                if (!q) return slide.mediaItem;
+                return {
+                  id: `quad-${idx}`,
+                  type: q.svgCode ? 'svg-diagram' : 'image',
+                  title: q.question,
+                  url: q.imageUrl,
+                  svgCode: q.svgCode,
+                  cropFit: 'contain',
+                  frameShape: 'clean',
+                };
+              })()
+            : mediaTargetElementId?.startsWith('vocab-media-')
             ? (() => {
                 const idx = parseInt(mediaTargetElementId.replace('vocab-media-', ''), 10);
                 const t = slide.keyTermsStrip?.[idx];
@@ -2418,6 +2637,26 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
           setMediaTargetElementId(null);
         }}
         onSelectMedia={(media) => {
+          if (mediaTargetElementId?.startsWith('quad-media-')) {
+            const idx = parseInt(mediaTargetElementId.replace('quad-media-', ''), 10);
+            const currentQuads = slide.starterQuadrants || [];
+            if (currentQuads[idx]) {
+              updateActiveSlide({
+                starterQuadrants: currentQuads.map((q, i) =>
+                  i === idx
+                    ? {
+                        ...q,
+                        imageUrl: media.type === 'image' ? media.url : undefined,
+                        svgCode: media.type === 'svg-diagram' ? media.svgCode : undefined,
+                      }
+                    : q
+                ),
+              });
+            }
+            setMediaTargetElementId(null);
+            setMediaOpen(false);
+            return;
+          }
           if (mediaTargetElementId?.startsWith('vocab-media-')) {
             const idx = parseInt(mediaTargetElementId.replace('vocab-media-', ''), 10);
             const currentTerms = slide.keyTermsStrip || [];

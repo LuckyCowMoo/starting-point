@@ -198,7 +198,12 @@ NON-NEGOTIABLE SLIDE WRITING & LAYOUT RULES:
      * Write the direct question immediately—NEVER prefix with "From your previous unit on..." or "From Lesson 1:".
      * Keep every starter question <= 16 words and every option <= 5 words so all 4 quadrants fit cleanly.
      * RETRIEVAL ONLY: Test only previously taught material (Lesson 1 = Previous Unit only; Lesson k>1 = Lessons 1..k-1 or Previous Unit).
-     * ~90% Multiple Choice ("options": ["A. ...", "B. ...", "C. ...", "D. ..."]) with real distractors and "answer" starting with the letter (e.g. "B — ...").
+     * Choose varied "layout" values across the 4 quadrants:
+       - "multiple-choice": Standard 4 MC choices ("options": ["A. ...", "B. ...", "C. ...", "D. ..."]) with "answer": "B — ...".
+       - "true-false": Question/statement with "options": ["True", "False"] and "answer": "A — True" or "B — False — <concise why>".
+       - "identify-picture-mc": Visual diagram or picture with 4 MC options ("imagePrompt": "...", "options": [...]).
+       - "identify-picture-open": Visual diagram or picture with open whiteboard question ("imagePrompt": "...", no options, model "answer").
+       - "open-ended": Direct whiteboard prompt without MC (no options, model "answer").
    - **Slide 2 ("lesson-title-page")**: Concise topic "title" (<= 5 words), readable "lessonDate", conversational second-person "bigQuestion" hook, optional 2–3 "keyTermsStrip" terms, and "suggestedMediaQuery".
    - **When Standard Presets Do Not Fit**: Use "presetId": "custom" with non-overlapping "customCanvasElements" and an inline <svg viewBox="0 0 800 420"> diagram (such as a clean place-value grid, state table, or labelled architecture visual), or set "teacherDesignNote" if custom teacher artwork is needed.
 
@@ -517,7 +522,7 @@ SUMMARY OF CLASSROOM-READY SLIDE RULES:
 - IMMEDIATE QUESTION-TO-ANSWER REVEAL DUPLICATE SLIDES: Pair every check and practice task with an immediately following duplicate Answer-Reveal slide that overlays green checkmarks (✅) or bolds/highlights the missing answers in place, and use 2–3 slide sequences for key hinges (Question -> Reveal Answer + "Why is that?" -> Reveal Reason).
 - VISUAL ROUTINE ICONS ONLY: Never write "(On MWBs)" or "(In Books)" in titles, headings, or text—always use "routineIcons".
 - MANDATORY SLIDE 1 ("mwb-starter-quadrant") & SLIDE 2 ("lesson-title-page"):
-  * Slide 1: "label" strictly "1".."4", direct questions <= 16 words without "From previous unit:" prefixes, options <= 5 words, retrieval ONLY (${lesson.lessonNumber === 1 ? 'from Previous Unit ONLY' : `from Lessons 1–${lesson.lessonNumber - 1} or Previous Unit`}), ~90% MC with "answer" starting with the letter (e.g. "B — ...").
+  * Slide 1: "label" strictly "1".."4", direct questions <= 16 words without "From previous unit:" prefixes, options <= 5 words, retrieval ONLY (${lesson.lessonNumber === 1 ? 'from Previous Unit ONLY' : `from Lessons 1–${lesson.lessonNumber - 1} or Previous Unit`}), support varied layouts: "multiple-choice", "true-false", "identify-picture-mc", "identify-picture-open", or "open-ended".
   * Slide 2 (Lesson Title Page): Clean title page ONLY containing concise topic "title" (<= 5 words), readable "lessonDate" (e.g. "Thursday, 14 November 2026"), and a high-quality visual/diagram ("suggestedMediaQuery"). Do NOT include key terms on the title page.
 - OVERRIDE BAD BLUEPRINT PRESETS & STRIP META PREFIXES: If a blueprint slide's "presetId" does not fit the number of items (e.g. "vocab-single-term-focus" used for 3 terms), upgrade the "presetId" to the appropriate preset (e.g. "vocabulary-spotlight"). Always strip blueprint prefixes like "Hinge Check:", "Task 1:", or "Plenary:" from the final pupil-facing "title".
 - STEPS ON THE SAME SIDE OF THE WAVE: On a slide with sequential steps (Step 1, Step 2, etc.), ALL steps MUST be on the SAME layer and SAME side of the colour wave (always "layer": "top"). Never split sequential steps across the wave!

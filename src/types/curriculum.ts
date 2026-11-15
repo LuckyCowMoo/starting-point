@@ -91,12 +91,23 @@ export interface SequenceObjectives {
   pedagogicalSummary: string;
 }
 
+export type StarterQuadrantLayout =
+  | 'multiple-choice'
+  | 'open-ended'
+  | 'identify-picture-mc'
+  | 'identify-picture-open'
+  | 'true-false';
+
 export interface StarterQuadrant {
   id: 'q1' | 'q2' | 'q3' | 'q4';
   label: string;
+  layout?: StarterQuadrantLayout;
   question: string;
-  options?: [string, string, string, string];
+  options?: string[];
   answer: string;
+  imageUrl?: string;
+  svgCode?: string;
+  imagePrompt?: string;
 }
 
 export type DualCodeIconId =

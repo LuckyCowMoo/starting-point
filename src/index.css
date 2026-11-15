@@ -93,7 +93,11 @@
   animation: timerDrumOut 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-/* Ensure boxed cards have clean neutral borders on all four sides by default rather than falling back to black currentColor */
+/* Ensure all borders across the entire app default to a clean neutral slate-200 rather than falling back to black currentColor (#18181B) */
+*, ::before, ::after {
+  border-color: #E2E8F0;
+}
+
 [class*="border-2"]:not([class*="border-zinc-"]):not([class*="border-white"]):not([class*="border-black"]):not([class*="border-sky-"]):not([class*="border-emerald-"]):not([class*="border-rose-"]):not([class*="border-indigo-"]) {
   border-color: #E2E8F0;
 }

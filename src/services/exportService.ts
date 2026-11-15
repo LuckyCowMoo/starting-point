@@ -9,7 +9,7 @@ import {
   estimateSlideObstacles,
   isSlideRegionDark,
 } from '../components/canvas/paperCutPresets';
-import { isMcOptionCorrect } from '../components/canvas/SlideCanvas';
+import { isMcOptionCorrect, isTfOptionCorrect } from '../components/canvas/SlideCanvas';
 
 function cleanHex(color?: string, fallback = '0F172A'): string {
   const c = (color || '').replace('#', '').trim();
@@ -294,15 +294,50 @@ export async function generateLessonPptxBlob(
             });
           }
 
+          const isTf =
+            q.layout === 'true-false' ||
+            (q.options &&
+              q.options.length === 2 &&
+              (q.options[0].toLowerCase().trim() === 'true' ||
+                q.options[1].toLowerCase().trim() === 'false' ||
+                q.options[0].toLowerCase().trim() === 'false' ||
+                q.options[1].toLowerCase().trim() === 'true'));
+          const hasImg = Boolean(q.imageUrl);
+          const isMc =
+            q.layout === 'multiple-choice' ||
+            q.layout === 'identify-picture-mc' ||
+            (!isTf && !q.layout && q.options && q.options.length > 0);
+
+          let contentX = pos.x + 0.62;
+          let contentW = Math.max(1.2, pos.w - 0.72);
+
+          if (hasImg) {
+            const imgW = 1.6;
+            const imgH = Math.max(1.0, pos.h - 0.45);
+            try {
+              pptSlide.addImage({
+                path: q.imageUrl,
+                x: pos.x + 0.12,
+                y: pos.y + 0.35,
+                w: imgW,
+                h: imgH,
+              });
+            } catch {
+              // Ignore image load failure
+            }
+            contentX = pos.x + imgW + 0.25;
+            contentW = Math.max(1.0, pos.w - (imgW + 0.38));
+          }
+
           pptSlide.addText(String(qIdx + 1), {
-            x: pos.x + 0.12,
-            y: pos.y + 0.12,
-            w: 0.38,
-            h: 0.38,
+            x: hasImg ? pos.x + 0.12 : pos.x + 0.12,
+            y: pos.y + 0.1,
+            w: 0.34,
+            h: 0.34,
             align: 'center',
             valign: 'middle',
             fontFace: 'Outfit',
-            fontSize: 12,
+            fontSize: 11,
             bold: true,
             color: quadOnDark ? darkInkHex : 'FFFFFF',
             fill: { color: quadOnDark ? 'FFFFFF' : accentHex },
@@ -310,19 +345,79 @@ export async function generateLessonPptxBlob(
           });
 
           pptSlide.addText(safeText(q.question), {
-            x: pos.x + 0.62,
+            x: contentX,
             y: pos.y + 0.1,
-            w: Math.max(1.2, pos.w - 0.72),
-            h: q.options && q.options.length > 0 ? 0.8 : Math.max(0.8, pos.h - 0.9),
+            w: contentW,
+            h: isMc || isTf ? 0.75 : Math.max(0.8, pos.h - 0.9),
             fontFace: 'Plus Jakarta Sans',
-            fontSize: 14,
+            fontSize: hasImg ? 12.5 : 13.5,
             bold: true,
             color: quadOnDark ? 'FFFFFF' : darkInkHex,
             valign: 'top',
           });
 
-          if (q.options && q.options.length > 0) {
-            const colW = Math.max(1.0, (pos.w - 0.72) / 2);
+          if (isTf) {
+            // True / False Chooser in PPTX
+            const tfW = Math.max(0.8, (contentW - 0.2) / 2);
+            ['True', 'False'].forEach((tfVal, tfIdx) => {
+              const isThisTrue = tfVal === 'True';
+              const isCorrect = isTfOptionCorrect(isThisTrue, q.answer);
+              const letter = tfIdx === 0 ? 'A' : 'B';
+
+              pptSlide.addText(`${letter}. ${tfVal}`, {
+                x: contentX + tfIdx * (tfW + 0.2),
+                y: pos.y + 0.95,
+                w: tfW,
+                h: 0.5,
+                align: 'center',
+                valign: 'middle',
+                fontFace: 'Plus Jakarta Sans',
+                fontSize: 12,
+                bold: Boolean(isRevealed && isCorrect),
+                color: isRevealed
+                  ? isCorrect
+                    ? 'FFFFFF'
+                    : '94A3B8'
+                  : quadOnDark
+                  ? 'FFFFFF'
+                  : darkInkHex,
+                fill: {
+                  color: isRevealed
+                    ? isCorrect
+                      ? '059669'
+                      : 'F1F5F9'
+                    : 'F8FAFC',
+                },
+                line: {
+                  color: isRevealed
+                    ? isCorrect
+                      ? '047857'
+                      : 'E2E8F0'
+                    : 'CBD5E1',
+                  width: 1,
+                },
+                rectRadius: 0.08,
+              });
+            });
+
+            if (isRevealed && q.answer && q.answer.includes('—')) {
+              pptSlide.addText(safeText(q.answer), {
+                x: contentX,
+                y: pos.y + 1.55,
+                w: contentW,
+                h: 0.42,
+                fontFace: 'Plus Jakarta Sans',
+                fontSize: 10.5,
+                bold: true,
+                color: '065F46',
+                fill: { color: 'ECFDF5' },
+                line: { color: 'A7F3D0', width: 1 },
+                rectRadius: 0.06,
+                valign: 'middle',
+              });
+            }
+          } else if (isMc && q.options && q.options.length > 0) {
+            const colW = Math.max(1.0, (contentW - 0.15) / 2);
             q.options.slice(0, 4).forEach((opt, optIdx) => {
               const col = optIdx % 2;
               const row = Math.floor(optIdx / 2);
@@ -340,12 +435,12 @@ export async function generateLessonPptxBlob(
                 : '334155';
 
               pptSlide.addText(`${letter}. ${cleanOpt}`, {
-                x: pos.x + 0.56 + col * colW,
-                y: pos.y + 1.02 + row * 0.62,
-                w: Math.max(0.8, colW - 0.12),
-                h: 0.52,
+                x: contentX + col * (colW + 0.15),
+                y: pos.y + 0.95 + row * 0.58,
+                w: colW,
+                h: 0.5,
                 fontFace: 'Plus Jakarta Sans',
-                fontSize: 11.5,
+                fontSize: hasImg ? 10.5 : 11.5,
                 bold: Boolean(isRevealed && isCorrect),
                 color: optColor,
                 ...(isRevealed && isCorrect
@@ -359,17 +454,31 @@ export async function generateLessonPptxBlob(
             });
           } else if (isRevealed) {
             pptSlide.addText(safeText(q.answer), {
-              x: pos.x + 0.56,
-              y: pos.y + Math.max(1.2, pos.h - 0.72),
-              w: Math.max(1.0, pos.w - 0.7),
+              x: contentX,
+              y: pos.y + Math.max(1.0, pos.h - 0.72),
+              w: contentW,
               h: 0.54,
               fontFace: 'Plus Jakarta Sans',
-              fontSize: 12.5,
+              fontSize: 12,
               bold: true,
               color: 'FFFFFF',
               fill: { color: '059669' },
               line: { color: '047857', width: 1 },
               rectRadius: 0.08,
+              valign: 'middle',
+            });
+          } else {
+            pptSlide.addText('Whiteboard Response Area', {
+              x: contentX,
+              y: pos.y + Math.max(1.0, pos.h - 0.72),
+              w: contentW,
+              h: 0.54,
+              fontFace: 'Plus Jakarta Sans',
+              fontSize: 11,
+              color: '94A3B8',
+              line: { color: 'CBD5E1', width: 1, dashType: 'dash' },
+              rectRadius: 0.08,
+              align: 'center',
               valign: 'middle',
             });
           }

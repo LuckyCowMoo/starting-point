@@ -159,34 +159,29 @@ interface InlineEditableProps {
   placeholder?: string;
   className?: string;
   style?: React.CSSProperties;
-  renderPreview?: () => React.ReactNode;
   onCommit: (next: string) => void;
 }
 
 const InlineEditableText: React.FC<InlineEditableProps> = ({
   value,
-  editable,
+  editable = true,
   multiline = false,
   placeholder = 'Click to edit...',
   className = '',
   style,
-  renderPreview,
   onCommit,
 }) => {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const elRef = useRef<HTMLSpanElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const initialValueRef = useRef(value);
 
+  // Sync DOM with external value when NOT actively focused
   useEffect(() => {
-    setDraft(value);
-  }, [value]);
-
-  useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
+    if (elRef.current && document.activeElement !== elRef.current) {
+      elRef.current.innerText = value || '';
+      initialValueRef.current = value || '';
     }
-  }, [editing]);
+  }, [value]);
 
   if (!editable) {
     return (
@@ -196,75 +191,76 @@ const InlineEditableText: React.FC<InlineEditableProps> = ({
     );
   }
 
-  if (editing) {
-    const finish = () => {
-      setEditing(false);
-      if (draft !== value) {
-        onCommit(draft);
-      }
-    };
+  const handleFocus = () => {
+    setIsFocused(true);
+    initialValueRef.current = elRef.current?.innerText ?? value ?? '';
+  };
 
-    if (multiline) {
-      return (
-        <textarea
-          ref={inputRef as React.RefObject<HTMLTextAreaElement>}
-          value={draft}
-          rows={Math.max(2, Math.min(8, draft.split('\n').length + 1))}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={finish}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              setDraft(value);
-              setEditing(false);
-            }
-          }}
-          className={`${className} w-full bg-white/95 text-zinc-900 rounded-xl px-3 py-2 border-2 border-amber-500 shadow-lg outline-none resize-y`}
-          style={{ ...style, color: '#18181B' }}
-        />
-      );
+  const handleBlur = () => {
+    setIsFocused(false);
+    if (!elRef.current) return;
+    const current = elRef.current.innerText.trim();
+    if (current !== initialValueRef.current) {
+      initialValueRef.current = current;
+      onCommit(current);
     }
+  };
 
-    return (
-      <input
-        ref={inputRef as React.RefObject<HTMLInputElement>}
-        value={draft}
-        onClick={(e) => e.stopPropagation()}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={finish}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            finish();
-          } else if (e.key === 'Escape') {
-            setDraft(value);
-            setEditing(false);
-          }
-        }}
-        className={`${className} w-full bg-white/95 text-zinc-900 rounded-xl px-3 py-1 border-2 border-amber-500 shadow-lg outline-none`}
-        style={{ ...style, color: '#18181B' }}
-      />
-    );
-  }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLSpanElement>) => {
+    e.stopPropagation();
+    if (!multiline && e.key === 'Enter') {
+      e.preventDefault();
+      elRef.current?.blur();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      if (elRef.current) {
+        elRef.current.innerText = initialValueRef.current;
+        elRef.current.blur();
+      }
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLSpanElement>) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+  };
+
+  const isEmpty = !value && !isFocused;
 
   return (
     <span
+      ref={elRef}
+      contentEditable={editable ? 'plaintext-only' : false}
+      suppressContentEditableWarning
+      data-no-drag="true"
+      data-editable-text="true"
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      onPaste={handlePaste}
+      onPointerDown={(e) => {
+        // Prevent slot drag initiation so user can position caret and highlight text
+        e.stopPropagation();
+      }}
       onClick={(e) => {
         e.stopPropagation();
-        setDraft(value);
-        setEditing(true);
       }}
       title="Click to edit text directly on slide"
-      className={`${className} ${renderPreview ? 'block' : 'inline-block'} rounded-lg cursor-text transition-[outline] hover:outline-2 hover:outline-dashed hover:outline-amber-500/80 hover:bg-amber-50/15`}
-      style={style}
+      className={`${className} outline-none transition-[box-shadow,background-color] rounded-lg ${
+        isFocused
+          ? 'ring-2 ring-amber-400/90 bg-amber-400/10'
+          : 'hover:ring-2 hover:ring-dashed hover:ring-amber-400/60 hover:bg-amber-400/5 cursor-text'
+      } ${isEmpty ? 'opacity-40 italic' : ''}`}
+      style={{
+        ...style,
+        display: multiline ? 'block' : 'inline-block',
+        minWidth: '28px',
+        wordBreak: 'break-word',
+        whiteSpace: multiline ? 'pre-wrap' : 'normal',
+      }}
     >
-      {renderPreview ? (
-        renderPreview()
-      ) : value ? (
-        value
-      ) : (
-        <span className="opacity-45 italic">{placeholder}</span>
-      )}
+      {value || (isEmpty ? placeholder : '')}
     </span>
   );
 };
@@ -489,7 +485,11 @@ const InteractiveSlot: React.FC<InteractiveSlotProps> = ({
         if (e.button !== 0) return;
         const target = e.target as HTMLElement;
         const isCtrl = e.ctrlKey || e.metaKey;
-        if (target.closest('input, textarea, select, button, [data-no-drag]')) {
+        if (
+          target.closest(
+            'input, textarea, select, button, [data-no-drag], [contenteditable], [data-editable-text]'
+          )
+        ) {
           e.stopPropagation();
           onSelect(isCtrl);
           return;
@@ -515,6 +515,7 @@ const InteractiveSlot: React.FC<InteractiveSlotProps> = ({
       {isSelected && showSingleToolbar && (
         <div
           data-no-drag="true"
+      data-editable-text="true"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           className="absolute -top-12 left-0 z-50 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900/95 text-white shadow-2xl border border-zinc-700 whitespace-nowrap animate-fade-in"
@@ -598,6 +599,7 @@ const InteractiveSlot: React.FC<InteractiveSlotProps> = ({
           <div
             key={h.dir}
             data-no-drag="true"
+      data-editable-text="true"
             onPointerDown={(e) => {
               e.stopPropagation();
               e.preventDefault();
@@ -1575,91 +1577,126 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     onDark = false,
     onCommit?: (next: string) => void
   ) => {
-    const renderFormatted = () => {
-      // Clean comparison callout when AI attempts inline WRONG vs CORRECT tables
-      if (/WRONG[:\s]/i.test(text) && /CORRECT[:\s]/i.test(text)) {
-        const parts = text.split(/(?=CORRECT[:\s])/i);
-        const wrongPart = parts[0]?.replace(/^•\s*/, '').trim() || '';
-        const correctPart = parts[1]?.replace(/^•\s*/, '').trim() || '';
-        return (
-          <div className="grid grid-cols-2 gap-4 my-2">
-            <div className="p-4.5 rounded-2xl bg-rose-50/95 border-2 border-rose-300 text-rose-950 space-y-2 shadow-xs">
-              <div className="text-[17px] font-black uppercase tracking-wider text-rose-700 flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-rose-500 inline-block" />
-                Misconception / Non-Example
-              </div>
-              <p className="text-[26px] leading-snug font-bold font-mono whitespace-pre-line">
-                {wrongPart}
-              </p>
+    // 1. Misconception vs Rule callout
+    if (/WRONG[:\s]/i.test(text) && /CORRECT[:\s]/i.test(text)) {
+      const parts = text.split(/(?=CORRECT[:\s])/i);
+      const wrongPart = parts[0]?.replace(/^•\s*/, '').trim() || '';
+      const correctPart = parts[1]?.replace(/^•\s*/, '').trim() || '';
+      return (
+        <div className="grid grid-cols-2 gap-4 my-2">
+          <div className="p-4.5 rounded-2xl bg-rose-50/95 border-2 border-rose-300 text-rose-950 space-y-2 shadow-xs">
+            <div className="text-[17px] font-black uppercase tracking-wider text-rose-700 flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-rose-500 inline-block" />
+              Misconception / Non-Example
             </div>
-            <div className="p-4.5 rounded-2xl bg-emerald-50/95 border-2 border-emerald-300 text-emerald-950 space-y-2 shadow-xs">
-              <div className="text-[17px] font-black uppercase tracking-wider text-emerald-700 flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
-                Correct Method / Rule
-              </div>
-              <p className="text-[26px] leading-snug font-bold font-mono whitespace-pre-line">
-                {correctPart}
-              </p>
-            </div>
+            <p className="text-[26px] leading-snug font-bold font-mono whitespace-pre-line">
+              <InlineEditableText
+                value={wrongPart}
+                editable={editable && !isThumbnail && Boolean(onCommit)}
+                multiline
+                className="text-[26px] leading-snug font-bold font-mono block w-full text-rose-950"
+                onCommit={(next) => onCommit?.(`${next}\n${correctPart}`)}
+              />
+            </p>
           </div>
-        );
-      }
-
-      const lines = text
-        .split(/\n+/)
-        .map((l) => l.trim())
-        .filter(Boolean);
-
-      if (lines.length <= 1 && !lines[0]?.startsWith('•') && !lines[0]?.startsWith('-')) {
-        return (
-          <p
-            className={`${fontSizeClass} leading-[1.42] font-medium`}
-            style={{ color: textColor }}
-          >
-            {text}
-          </p>
-        );
-      }
-
-      return (
-        <ul className="space-y-3">
-          {lines.map((line, i) => {
-            const clean = line.replace(/^[•\-*]\s*/, '');
-            return (
-              <li key={i} className="flex items-start gap-3.5">
-                <span
-                  className="w-3 h-3 rounded-full mt-[15px] shrink-0"
-                  style={{
-                    backgroundColor: onDark ? '#FFFFFF' : neutralAccent,
-                    opacity: onDark ? 0.92 : 0.85,
-                  }}
-                />
-                <span
-                  className={`${fontSizeClass} leading-[1.4] font-medium`}
-                  style={{ color: textColor }}
-                >
-                  {clean}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      );
-    };
-
-    if (editable && onCommit && !isThumbnail) {
-      return (
-        <InlineEditableText
-          value={text}
-          editable={editable}
-          multiline
-          renderPreview={renderFormatted}
-          onCommit={onCommit}
-        />
+          <div className="p-4.5 rounded-2xl bg-emerald-50/95 border-2 border-emerald-300 text-emerald-950 space-y-2 shadow-xs">
+            <div className="text-[17px] font-black uppercase tracking-wider text-emerald-700 flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
+              Correct Method / Rule
+            </div>
+            <p className="text-[26px] leading-snug font-bold font-mono whitespace-pre-line">
+              <InlineEditableText
+                value={correctPart}
+                editable={editable && !isThumbnail && Boolean(onCommit)}
+                multiline
+                className="text-[26px] leading-snug font-bold font-mono block w-full text-emerald-950"
+                onCommit={(next) => onCommit?.(`${wrongPart}\n${next}`)}
+              />
+            </p>
+          </div>
+        </div>
       );
     }
 
-    return renderFormatted();
+    const lines = text
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const hasBullets =
+      lines.length > 1 || lines[0]?.startsWith('•') || lines[0]?.startsWith('-');
+
+    if (hasBullets) {
+      return (
+        <div className="space-y-3">
+          <ul className="space-y-3">
+            {lines.map((line, i) => {
+              const clean = line.replace(/^[•\-*]\s*/, '');
+              return (
+                <li key={i} className="flex items-start gap-3.5">
+                  <span
+                    className="w-3 h-3 rounded-full mt-[15px] shrink-0"
+                    style={{
+                      backgroundColor: onDark ? '#FFFFFF' : neutralAccent,
+                      opacity: onDark ? 0.92 : 0.85,
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <InlineEditableText
+                      value={clean}
+                      editable={editable && !isThumbnail && Boolean(onCommit)}
+                      multiline={false}
+                      className={`${fontSizeClass} leading-[1.4] font-medium block w-full`}
+                      style={{ color: textColor }}
+                      onCommit={(next) => {
+                        if (!onCommit) return;
+                        const updated = [...lines];
+                        if (!next.trim()) {
+                          updated.splice(i, 1);
+                        } else {
+                          updated[i] = `• ${next.trim()}`;
+                        }
+                        onCommit(updated.join('\n'));
+                      }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {editable && onCommit && !isThumbnail && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                const updated = [
+                  ...lines.map((l) => (l.startsWith('•') ? l : `• ${l}`)),
+                  '• New point',
+                ];
+                onCommit(updated.join('\n'));
+              }}
+              className="opacity-0 group-hover/slot:opacity-60 hover:!opacity-100 text-[18px] font-bold text-sky-600 dark:text-sky-300 flex items-center gap-1.5 transition py-1 px-2.5 rounded-xl hover:bg-sky-500/10 cursor-pointer"
+            >
+              <span>+ Add bullet point</span>
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    // Prose / single paragraph
+    return (
+      <div className="min-w-0 flex-1">
+        <InlineEditableText
+          value={text}
+          editable={editable && !isThumbnail && Boolean(onCommit)}
+          multiline
+          className={`${fontSizeClass} leading-[1.42] font-medium block w-full`}
+          style={{ color: textColor }}
+          onCommit={(next) => onCommit?.(next)}
+        />
+      </div>
+    );
   };
 
   const renderMediaFrame = (
@@ -3676,6 +3713,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         {selectedIds.length > 1 && groupBBox && canEditComponents && (
           <div
             data-no-drag="true"
+      data-editable-text="true"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
             className="absolute z-50 flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-zinc-900/95 text-white shadow-2xl border border-zinc-700 whitespace-nowrap animate-fade-in"

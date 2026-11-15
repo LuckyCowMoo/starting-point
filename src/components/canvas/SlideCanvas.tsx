@@ -1900,10 +1900,29 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               ? 'rgba(255,255,255,0.28)'
               : neutralBorder
             : undefined,
+          borderTopColor: isBoxed
+            ? onDark
+              ? 'rgba(255,255,255,0.28)'
+              : neutralBorder
+            : undefined,
+          borderRightColor: isBoxed
+            ? onDark
+              ? 'rgba(255,255,255,0.28)'
+              : neutralBorder
+            : undefined,
+          borderBottomColor: isBoxed
+            ? onDark
+              ? 'rgba(255,255,255,0.28)'
+              : neutralBorder
+            : undefined,
           borderLeftColor: isHighlight
             ? onDark
               ? '#FFFFFF'
               : neutralAccent
+            : isBoxed
+            ? onDark
+              ? 'rgba(255,255,255,0.28)'
+              : neutralBorder
             : undefined,
         }}
       >
@@ -2034,7 +2053,15 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 : ''
             }
             style={
-              titleBoxed && !titleOnDark ? { borderColor: neutralBorder } : undefined
+              titleBoxed && !titleOnDark
+                ? {
+                    borderColor: neutralBorder,
+                    borderTopColor: neutralBorder,
+                    borderRightColor: neutralBorder,
+                    borderBottomColor: neutralBorder,
+                    borderLeftColor: neutralBorder,
+                  }
+                : undefined
             }
           >
             <h1
@@ -2153,7 +2180,14 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                   dateOnDark
                     ? { color: '#FFFFFF' }
                     : dateBoxed
-                    ? { borderColor: neutralBorder, color: neutralAccent }
+                    ? {
+                        borderColor: neutralBorder,
+                        borderTopColor: neutralBorder,
+                        borderRightColor: neutralBorder,
+                        borderBottomColor: neutralBorder,
+                        borderLeftColor: neutralBorder,
+                        color: neutralAccent,
+                      }
                     : { color: neutralAccent }
                 }
               >
@@ -2188,7 +2222,15 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                     : ''
                 }
                 style={
-                  titleBoxed && !titleOnDark ? { borderColor: neutralBorder } : undefined
+                  titleBoxed && !titleOnDark
+                    ? {
+                        borderColor: neutralBorder,
+                        borderTopColor: neutralBorder,
+                        borderRightColor: neutralBorder,
+                        borderBottomColor: neutralBorder,
+                        borderLeftColor: neutralBorder,
+                      }
+                    : undefined
                 }
               >
                 <h1
@@ -2216,16 +2258,26 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 <div
                   className={
                     bigQBoxed
-                      ? `p-8 rounded-3xl border-l-[12px] shadow-lg ${
+                      ? `p-8 rounded-3xl border-2 shadow-lg ${
                           bigQOnDark
-                            ? 'bg-white/14 backdrop-blur-md border-y border-r border-white/25'
+                            ? 'bg-white/14 backdrop-blur-md border-white/30'
                             : 'bg-white/95'
                         }`
                       : hideWaveBackground
                       ? 'p-6 rounded-2xl border-2 border-dashed border-slate-300 border-l-[10px] bg-white/65'
                       : 'border-l-[9px] pl-6 py-1'
                   }
-                  style={{ borderLeftColor: bigQOnDark ? '#FFFFFF' : neutralAccent }}
+                  style={
+                    bigQBoxed
+                      ? {
+                          borderColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                          borderTopColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                          borderRightColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                          borderBottomColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                          borderLeftColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                        }
+                      : { borderLeftColor: bigQOnDark ? '#FFFFFF' : neutralAccent }
+                  }
                 >
                   <div
                     className="text-[22px] font-extrabold uppercase tracking-wider mb-2"
@@ -2275,7 +2327,17 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                       className={`px-6 py-3 rounded-2xl border-2 shadow-sm text-[25px] ${
                         termsOnDark ? 'bg-white/16 border-white/30 text-white' : 'bg-white/95'
                       }`}
-                      style={termsOnDark ? undefined : { borderColor: neutralBorder }}
+                      style={
+                        termsOnDark
+                          ? undefined
+                          : {
+                              borderColor: neutralBorder,
+                              borderTopColor: neutralBorder,
+                              borderRightColor: neutralBorder,
+                              borderBottomColor: neutralBorder,
+                              borderLeftColor: neutralBorder,
+                            }
+                      }
                     >
                       <span
                         className="font-extrabold"
@@ -2399,7 +2461,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               const quadOnDark = quadOverride?.layer
                 ? quadOverride.layer === 'bottom'
                 : topOnDark;
-              const quadBoxed = Boolean(quadOverride?.boxed);
+              const quadBoxed = quadOverride?.boxed !== undefined ? quadOverride.boxed : true;
               const revealed = editorPreviewAllAnswers || idx < starterRevealedCount;
               const cleanQuestion = stripStarterMetaPrefix(q.question);
               const qLen = cleanQuestion.length;
@@ -2432,7 +2494,15 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                       : 'px-2 py-2'
                   }`}
                   style={
-                    quadBoxed && !quadOnDark ? { borderColor: neutralBorder } : undefined
+                    quadBoxed && !quadOnDark
+                      ? {
+                          borderColor: neutralBorder,
+                          borderTopColor: neutralBorder,
+                          borderRightColor: neutralBorder,
+                          borderBottomColor: neutralBorder,
+                          borderLeftColor: neutralBorder,
+                        }
+                      : undefined
                   }
                 >
                   <div className="flex items-start gap-3.5 shrink-0">
@@ -2645,7 +2715,15 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                     : ''
                 }
                 style={
-                  titleBoxed && !titleOnDark ? { borderColor: neutralBorder } : undefined
+                  titleBoxed && !titleOnDark
+                    ? {
+                        borderColor: neutralBorder,
+                        borderTopColor: neutralBorder,
+                        borderRightColor: neutralBorder,
+                        borderBottomColor: neutralBorder,
+                        borderLeftColor: neutralBorder,
+                      }
+                    : undefined
                 }
               >
                 <h1
@@ -2673,16 +2751,26 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 <div
                   className={
                     bigQBoxed
-                      ? `p-8 rounded-3xl border-l-[12px] shadow-md ${
+                      ? `p-8 rounded-3xl border-2 shadow-md ${
                           bigQOnDark
-                            ? 'bg-white/14 backdrop-blur-md border-y border-r border-white/25'
+                            ? 'bg-white/14 backdrop-blur-md border-white/30'
                             : 'bg-white/92'
                         }`
                       : hideWaveBackground
                       ? 'p-6 rounded-2xl border-2 border-dashed border-slate-300 border-l-[10px] bg-white/65'
                       : 'border-l-[10px] pl-7 py-1'
                   }
-                  style={{ borderLeftColor: bigQOnDark ? '#FFFFFF' : neutralAccent }}
+                  style={
+                    bigQBoxed
+                      ? {
+                          borderColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                          borderTopColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                          borderRightColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                          borderBottomColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                          borderLeftColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                        }
+                      : { borderLeftColor: bigQOnDark ? '#FFFFFF' : neutralAccent }
+                  }
                 >
                   <p
                     className="text-[42px] font-bold leading-snug"
@@ -2732,7 +2820,13 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                       termBoxed
                         ? termOnDark
                           ? undefined
-                          : { borderColor: neutralBorder }
+                          : {
+                              borderColor: neutralBorder,
+                              borderTopColor: neutralBorder,
+                              borderRightColor: neutralBorder,
+                              borderBottomColor: neutralBorder,
+                              borderLeftColor: neutralBorder,
+                            }
                         : !hideWaveBackground
                         ? { borderTopColor: termOnDark ? '#FFFFFF' : neutralAccent }
                         : undefined
@@ -2873,10 +2967,10 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 <div
                   className={
                     focusBoxed
-                      ? `rounded-3xl p-10 border-l-[12px] shadow-lg space-y-6 ${
+                      ? `rounded-3xl p-10 border-2 shadow-lg space-y-6 ${
                           focusOnDark
-                            ? 'bg-white/14 backdrop-blur-md border-y-2 border-r-2 border-white/30'
-                            : 'bg-white/95 border-y-2 border-r-2'
+                            ? 'bg-white/14 backdrop-blur-md border-white/30'
+                            : 'bg-white/95'
                         }`
                       : hideWaveBackground
                       ? 'rounded-2xl p-8 border-2 border-dashed border-slate-300 bg-white/65 space-y-5'
@@ -2886,7 +2980,10 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                     focusBoxed
                       ? {
                           borderColor: focusOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
-                          borderLeftColor: focusOnDark ? '#FFFFFF' : neutralAccent,
+                          borderTopColor: focusOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                          borderRightColor: focusOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                          borderBottomColor: focusOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                          borderLeftColor: focusOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
                         }
                       : !hideWaveBackground
                       ? { borderLeftColor: focusOnDark ? '#FFFFFF' : neutralAccent }
@@ -3338,7 +3435,17 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 ? 'rounded-3xl bg-white/95 border-2 shadow-lg'
                 : 'rounded-3xl bg-white/92 shadow-md'
             }`}
-            style={isBoxed ? { borderColor: neutralBorder } : undefined}
+            style={
+              isBoxed
+                ? {
+                    borderColor: neutralBorder,
+                    borderTopColor: neutralBorder,
+                    borderRightColor: neutralBorder,
+                    borderBottomColor: neutralBorder,
+                    borderLeftColor: neutralBorder,
+                  }
+                : undefined
+            }
             dangerouslySetInnerHTML={{ __html: el.svgCode }}
           />
         );
@@ -3360,7 +3467,13 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
             }`}
             style={
               isBoxed
-                ? { borderColor: onDark ? 'rgba(255,255,255,0.28)' : neutralBorder }
+                ? {
+                    borderColor: onDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                    borderTopColor: onDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                    borderRightColor: onDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                    borderBottomColor: onDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                    borderLeftColor: onDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                  }
                 : undefined
             }
           >

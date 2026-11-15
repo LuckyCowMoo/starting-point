@@ -92,3 +92,11 @@
 .animate-timer-drum-out {
   animation: timerDrumOut 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
+
+/* Ensure boxed cards have consistent, matching borders on all four sides without falling back to currentColor */
+[class*="border-2"]:not([class*="border-l-"]):not([class*="border-zinc-"]) {
+  border-left-color: inherit;
+  border-right-color: inherit;
+  border-top-color: inherit;
+  border-bottom-color: inherit;
+}

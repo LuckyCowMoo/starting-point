@@ -155,7 +155,7 @@ export interface SlideMediaItem {
   caption?: string;
   cropFit: 'cover' | 'contain';
   frameShape: 'rounded-card' | 'organic-blob' | 'circle' | 'clean';
-  placement?: 'fill-bottom-layer' | 'boxed-card';
+  placement?: 'fill-bottom-layer' | 'boxed-card' | 'anchor-right' | 'anchor-left';
 }
 
 export interface PaperCutLayer {
@@ -215,6 +215,12 @@ export interface SlideBlueprint {
   pedagogicalRationale: PedagogicalRationale;
 }
 
+export interface SideImageConfig {
+  side: 'left' | 'right' | 'none';
+  widthPercent?: number; // default 38
+  controlPoints?: { x: number; y: number }[];
+}
+
 export interface SlideData {
   id: string;
   blueprintId: string;
@@ -243,6 +249,7 @@ export interface SlideData {
   hiddenElementIds?: string[];
   customWaveLayers?: PaperCutLayer[];
   waveControlPoints?: { x: number; y: number }[];
+  sideImageConfig?: SideImageConfig;
   timerSeconds?: number;
   speakerNotes: string;
   teacherDesignNote?: string;

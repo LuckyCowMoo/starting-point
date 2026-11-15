@@ -37,6 +37,10 @@ import {
 import { PHASE_PALETTES } from '../../data/palettes';
 import { PaperCutRenderer } from './PaperCutRenderer';
 import {
+  SideAnchoredImageWave,
+  getDefaultSideImageControlPoints,
+} from './SideAnchoredImageWave';
+import {
   computeConformingPaperCut,
   estimateSlideObstacles,
   isSlideRegionDark,
@@ -619,6 +623,8 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   const [scale, setScale] = useState(1);
   const [draggingPts, setDraggingPts] = useState<Point[] | null>(null);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [sideImgDraggingPts, setSideImgDraggingPts] = useState<Point[] | null>(null);
+  const [sideImgDragIdx, setSideImgDragIdx] = useState<number | null>(null);
   const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
   const [compDrag, setCompDrag] = useState<ComponentDragSession | null>(null);
   const lastDraggedAtRef = useRef(0);
@@ -654,6 +660,49 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   }, [slide.mediaItem, isTitlePage]);
 
   const hasFullBottomImage = effectiveMedia?.placement === 'fill-bottom-layer';
+
+  const effectiveSideConfig = useMemo(() => {
+    if (
+      slide.sideImageConfig &&
+      (slide.sideImageConfig.side === 'left' || slide.sideImageConfig.side === 'right')
+    ) {
+      return {
+        side: slide.sideImageConfig.side,
+        widthPercent: slide.sideImageConfig.widthPercent || 38,
+        controlPoints: slide.sideImageConfig.controlPoints,
+      };
+    }
+    if (slide.mediaItem?.placement === 'anchor-right') {
+      return {
+        side: 'right' as const,
+        widthPercent: slide.sideImageConfig?.widthPercent || 38,
+        controlPoints: slide.sideImageConfig?.controlPoints,
+      };
+    }
+    if (slide.mediaItem?.placement === 'anchor-left') {
+      return {
+        side: 'left' as const,
+        widthPercent: slide.sideImageConfig?.widthPercent || 38,
+        controlPoints: slide.sideImageConfig?.controlPoints,
+      };
+    }
+    return null;
+  }, [slide.sideImageConfig, slide.mediaItem?.placement]);
+
+  const activeSideImgPts = useMemo(() => {
+    if (!effectiveSideConfig) return [];
+    if (sideImgDraggingPts) return sideImgDraggingPts;
+    if (
+      effectiveSideConfig.controlPoints &&
+      effectiveSideConfig.controlPoints.length >= 3
+    ) {
+      return effectiveSideConfig.controlPoints;
+    }
+    return getDefaultSideImageControlPoints(
+      effectiveSideConfig.side,
+      effectiveSideConfig.widthPercent || 38
+    );
+  }, [effectiveSideConfig, sideImgDraggingPts]);
 
   const headerOnDark =
     !hideWaveBackground && isSlideRegionDark(slide.waveVariant, 'header', invert);
@@ -746,6 +795,54 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       window.removeEventListener('pointerup', onUp);
     };
   }, [dragIdx, computedPaper.controlPoints, onUpdateSlide]);
+
+  // Drag handler for Side Image Paper-Cut Wave control points
+  useEffect(() => {
+    if (sideImgDragIdx === null || !effectiveSideConfig) return;
+    const snapEdge = (val: number, max: number) => {
+      if (Math.abs(val) <= 14) return 0;
+      if (Math.abs(val - max) <= 14) return max;
+      return val;
+    };
+    const onMove = (e: PointerEvent) => {
+      const svg = svgOverlayRef.current;
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const rawX = ((e.clientX - rect.left) / rect.width) * 1920;
+      const rawY = ((e.clientY - rect.top) / rect.height) * 1080;
+      const canvasX = snapEdge(Math.max(-140, Math.min(2060, rawX)), 1920);
+      const canvasY = snapEdge(Math.max(-140, Math.min(1220, rawY)), 1080);
+      setSideImgDraggingPts((prev) => {
+        const base = prev ?? activeSideImgPts;
+        return base.map((p, i) => (i === sideImgDragIdx ? { x: canvasX, y: canvasY } : p));
+      });
+    };
+
+    const onUp = () => {
+      setSideImgDragIdx(null);
+      setSideImgDraggingPts((prev) => {
+        if (prev && onUpdateSlide) {
+          onUpdateSlide({
+            sideImageConfig: {
+              ...(slide.sideImageConfig || { side: effectiveSideConfig.side }),
+              side: effectiveSideConfig.side,
+              widthPercent: effectiveSideConfig.widthPercent || 38,
+              controlPoints: prev,
+            },
+          });
+        }
+        return null;
+      });
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [sideImgDragIdx, effectiveSideConfig, activeSideImgPts, onUpdateSlide, slide.sideImageConfig]);
 
   const latestSlideRef = useRef(slide);
   const latestUpdateRef = useRef(onUpdateSlide);
@@ -1210,6 +1307,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     }
 
     if (hiddenSet.has(slotId)) return null;
+    if (effectiveSideConfig) return null;
 
     let inner: React.ReactNode = null;
     if (!media || media.placement === 'fill-bottom-layer') {
@@ -2644,17 +2742,31 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     const hasBoxedMedia =
       Boolean(effectiveMedia) && effectiveMedia?.placement !== 'fill-bottom-layer';
     const showRightColumn =
-      bottomBlocks.length > 0 || hasBoxedMedia || hasFullBottomImage || isDualCodingLayout;
-    const leftRenderBlocks = isDualCodingLayout && (hasBoxedMedia || !bottomBlocks.length)
-      ? normalizedBlocks
-      : topBlocks;
+      !effectiveSideConfig &&
+      (bottomBlocks.length > 0 || hasBoxedMedia || hasFullBottomImage || isDualCodingLayout);
+    const leftRenderBlocks =
+      (isDualCodingLayout || effectiveSideConfig) && (hasBoxedMedia || !bottomBlocks.length)
+        ? normalizedBlocks
+        : topBlocks;
 
     return (
-      <div className={`relative z-20 flex-1 flex gap-10 min-h-0 ${contentPad}`}>
-        {/* Left Top-Sheet Zone */}
+      <div
+        className={`relative z-20 flex-1 flex gap-10 min-h-0 ${contentPad} ${
+          effectiveSideConfig?.side === 'right'
+            ? 'max-w-[1140px] pr-6'
+            : effectiveSideConfig?.side === 'left'
+            ? 'ml-[740px] pl-6 max-w-[1180px]'
+            : ''
+        }`}
+      >
+        {/* Main Content Zone */}
         <div
           className={`flex flex-col justify-center gap-5 ${
-            showRightColumn ? 'w-[840px] shrink-0' : 'flex-1 max-w-[1160px]'
+            showRightColumn
+              ? 'w-[840px] shrink-0'
+              : effectiveSideConfig
+              ? 'w-full max-w-[1120px]'
+              : 'flex-1 max-w-[1160px]'
           }`}
         >
           {leftRenderBlocks.map((b, i) => renderCard(b, i))}
@@ -2968,6 +3080,22 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           />
         )}
 
+        {effectiveSideConfig && !hideWaveBackground && (
+          <SideAnchoredImageWave
+            side={effectiveSideConfig.side}
+            widthPercent={effectiveSideConfig.widthPercent || 38}
+            controlPoints={activeSideImgPts}
+            mediaItem={effectiveMedia}
+            palette={palette}
+            invert={invert}
+            editable={editable}
+            isThumbnail={isThumbnail}
+            onOpenMediaPicker={onOpenMediaPicker}
+            hoveredTarget={hoveredImageTarget}
+            onHoverTarget={onHoverImageTarget}
+          />
+        )}
+
         {slide.presetId !== 'title-divider' && !isTitlePage && renderHeader()}
 
         {renderPresetContent(palette)}
@@ -2982,74 +3110,143 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         {showWavePathEditor &&
           !hideWaveBackground &&
           !isThumbnail &&
-          computedPaper.controlPoints.length > 0 && (
+          (computedPaper.controlPoints.length > 0 ||
+            (effectiveSideConfig && activeSideImgPts.length > 0)) && (
             <svg
               ref={svgOverlayRef}
               viewBox="0 0 1920 1080"
               className="absolute inset-0 w-full h-full z-40 pointer-events-auto overflow-visible"
             >
-              <path
-                d={
-                  slide.waveVariant === 'framed-halo' ||
-                  slide.waveVariant === 'dark-halo-spotlight'
-                    ? smoothClosedSpline(computedPaper.controlPoints)
-                    : smoothSplineSegment(computedPaper.controlPoints)
-                }
-                fill="none"
-                stroke="#F59E0B"
-                strokeWidth={6}
-                strokeDasharray="18 12"
-                strokeLinecap="round"
-              />
-              {computedPaper.controlPoints.map((pt, idx) => {
-                const hx = Math.max(18, Math.min(1902, pt.x));
-                const hy = Math.max(18, Math.min(1062, pt.y));
-                const isOutside = Math.abs(hx - pt.x) > 2 || Math.abs(hy - pt.y) > 2;
-                return (
-                  <g
-                    key={idx}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      setDraggingPts(computedPaper.controlPoints);
-                      setDragIdx(idx);
-                    }}
-                    style={{ cursor: 'grab' }}
-                  >
-                    {isOutside && (
-                      <line
-                        x1={hx}
-                        y1={hy}
-                        x2={pt.x}
-                        y2={pt.y}
-                        stroke="#D97706"
-                        strokeWidth={3}
-                        strokeDasharray="6 6"
-                      />
-                    )}
-                    <circle cx={hx} cy={hy} r={30} fill="transparent" />
-                    <circle
-                      cx={hx}
-                      cy={hy}
-                      r={16}
-                      fill={dragIdx === idx ? '#D97706' : '#FFFFFF'}
-                      stroke="#D97706"
-                      strokeWidth={6}
-                    />
-                    <text
-                      x={hx}
-                      y={hy + 7}
-                      textAnchor="middle"
-                      fontSize="16"
-                      fontWeight="800"
-                      fill={dragIdx === idx ? '#FFFFFF' : '#92400E'}
-                      pointerEvents="none"
-                    >
-                      {idx + 1}
-                    </text>
-                  </g>
-                );
-              })}
+              {computedPaper.controlPoints.length > 0 && (
+                <>
+                  <path
+                    d={
+                      slide.waveVariant === 'framed-halo' ||
+                      slide.waveVariant === 'dark-halo-spotlight'
+                        ? smoothClosedSpline(computedPaper.controlPoints)
+                        : smoothSplineSegment(computedPaper.controlPoints)
+                    }
+                    fill="none"
+                    stroke="#F59E0B"
+                    strokeWidth={6}
+                    strokeDasharray="18 12"
+                    strokeLinecap="round"
+                  />
+                  {computedPaper.controlPoints.map((pt, idx) => {
+                    const hx = Math.max(18, Math.min(1902, pt.x));
+                    const hy = Math.max(18, Math.min(1062, pt.y));
+                    const isOutside = Math.abs(hx - pt.x) > 2 || Math.abs(hy - pt.y) > 2;
+                    return (
+                      <g
+                        key={`bg-pt-${idx}`}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setDraggingPts(computedPaper.controlPoints);
+                          setDragIdx(idx);
+                        }}
+                        style={{ cursor: 'grab' }}
+                      >
+                        {isOutside && (
+                          <line
+                            x1={hx}
+                            y1={hy}
+                            x2={pt.x}
+                            y2={pt.y}
+                            stroke="#D97706"
+                            strokeWidth={3}
+                            strokeDasharray="6 6"
+                          />
+                        )}
+                        <circle cx={hx} cy={hy} r={30} fill="transparent" />
+                        <circle
+                          cx={hx}
+                          cy={hy}
+                          r={16}
+                          fill={dragIdx === idx ? '#D97706' : '#FFFFFF'}
+                          stroke="#D97706"
+                          strokeWidth={6}
+                        />
+                        <text
+                          x={hx}
+                          y={hy + 7}
+                          textAnchor="middle"
+                          fontSize="16"
+                          fontWeight="800"
+                          fill={dragIdx === idx ? '#FFFFFF' : '#92400E'}
+                          pointerEvents="none"
+                        >
+                          {idx + 1}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Draggable Cyan Control Points for Side-Anchored Image Wave */}
+              {effectiveSideConfig && activeSideImgPts.length > 0 && (
+                <g>
+                  <path
+                    d={smoothSplineSegment(activeSideImgPts)}
+                    fill="none"
+                    stroke="#0284C7"
+                    strokeWidth={6}
+                    strokeDasharray="18 12"
+                    strokeLinecap="round"
+                  />
+                  {activeSideImgPts.map((pt, idx) => {
+                    const hx = Math.max(18, Math.min(1902, pt.x));
+                    const hy = Math.max(18, Math.min(1062, pt.y));
+                    const isOutside = Math.abs(hx - pt.x) > 2 || Math.abs(hy - pt.y) > 2;
+                    const isDraggingThis = sideImgDragIdx === idx;
+                    return (
+                      <g
+                        key={`side-pt-${idx}`}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setSideImgDraggingPts(activeSideImgPts);
+                          setSideImgDragIdx(idx);
+                        }}
+                        style={{ cursor: 'grab' }}
+                      >
+                        {isOutside && (
+                          <line
+                            x1={hx}
+                            y1={hy}
+                            x2={pt.x}
+                            y2={pt.y}
+                            stroke="#0284C7"
+                            strokeWidth={3}
+                            strokeDasharray="6 6"
+                          />
+                        )}
+                        <circle cx={hx} cy={hy} r={32} fill="transparent" />
+                        <circle
+                          cx={hx}
+                          cy={hy}
+                          r={18}
+                          fill={isDraggingThis ? '#0284C7' : '#FFFFFF'}
+                          stroke="#0284C7"
+                          strokeWidth={6}
+                        />
+                        <text
+                          x={hx}
+                          y={hy + 6}
+                          textAnchor="middle"
+                          fontSize="13"
+                          fontWeight="800"
+                          fill={isDraggingThis ? '#FFFFFF' : '#0369A1'}
+                          pointerEvents="none"
+                        >
+                          Img {idx + 1}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </g>
+              )}
             </svg>
           )}
       </div>

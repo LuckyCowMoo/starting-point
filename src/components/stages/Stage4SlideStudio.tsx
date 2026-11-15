@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
+  ChevronDown,
+  ChevronUp,
   ClipboardPaste,
   Download,
   Eye,
@@ -9,7 +11,11 @@ import {
   Image as ImageIcon,
   Loader2,
   Lock,
+  Maximize2,
+  Minimize2,
   Palette,
+  PanelLeftClose,
+  PanelRightClose,
   Play,
   Plus,
   Sparkles,
@@ -132,6 +138,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
   const [historyFuture, setHistoryFuture] = useState<SlideData[][]>([]);
   const [hoveredImageTarget, setHoveredImageTarget] = useState<string | null>(null);
   const [pasteToast, setPasteToast] = useState<string | null>(null);
+  const [isNotesCollapsed, setIsNotesCollapsed] = useState(false);
 
   const showPasteToast = (msg: string) => {
     setPasteToast(msg);
@@ -223,6 +230,36 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
         ),
       });
       showPasteToast('Pasted image into slide element!');
+    } else if (
+      targetId === 'slot-anchored-side-image' ||
+      (slide.sideImageConfig && slide.sideImageConfig.side !== 'none') ||
+      slide.mediaItem?.placement === 'anchor-right' ||
+      slide.mediaItem?.placement === 'anchor-left'
+    ) {
+      const side =
+        slide.sideImageConfig?.side && slide.sideImageConfig.side !== 'none'
+          ? slide.sideImageConfig.side
+          : slide.mediaItem?.placement === 'anchor-left'
+          ? 'left'
+          : 'right';
+      updateActiveSlide({
+        sideImageConfig: {
+          side,
+          widthPercent: slide.sideImageConfig?.widthPercent || 38,
+          controlPoints: slide.sideImageConfig?.controlPoints,
+        },
+        mediaItem: {
+          id: `media-${Date.now()}`,
+          type: type === 'svg' ? 'svg-diagram' : 'image',
+          title: 'Anchored Side Visual',
+          url: type === 'image' ? data : undefined,
+          svgCode: type === 'svg' ? data : undefined,
+          cropFit: 'cover',
+          frameShape: 'clean',
+          placement: side === 'left' ? 'anchor-left' : 'anchor-right',
+        },
+      });
+      showPasteToast('Pasted image into Anchored Side Visual!');
     } else {
       updateActiveSlide({
         hiddenElementIds: slide.hiddenElementIds?.filter((id) => id !== 'slot-media'),
@@ -733,7 +770,11 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
         {/* Center 16:9 Canvas Stage */}
         <div className="flex-1 min-w-0 overflow-y-auto bg-zinc-200/60 p-5 flex flex-col items-center justify-start gap-3">
           {/* Quick Inline Canvas Toolbar */}
-          <div className="w-full max-w-5xl flex flex-wrap items-center justify-between gap-2 px-1">
+          <div
+            className={`w-full ${
+              isNotesCollapsed ? 'max-w-[1600px] 2xl:max-w-[1720px]' : 'max-w-6xl 2xl:max-w-7xl'
+            } flex flex-wrap items-center justify-between gap-2 px-1 transition-all duration-300`}
+          >
             <div className="flex flex-wrap items-center gap-1.5">
               {/* Undo / Redo */}
               <div className="flex items-center gap-1 border-r border-zinc-300 pr-1.5 mr-0.5">
@@ -833,11 +874,115 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                   <span>Reset Positions</span>
                 </button>
               )}
-              <span className="text-[11px] font-medium text-zinc-500 ml-1 hidden xl:inline">
-                Click any element to drag, resize, edit, or delete
-              </span>
+
+              {/* Anchor Side Image button group */}
+              <div className="flex items-center gap-1 border-l border-zinc-300 pl-1.5 ml-0.5">
+                <span className="text-[11px] font-bold text-zinc-600 hidden 2xl:inline-flex items-center gap-1">
+                  <PanelRightClose size={12} className="text-zinc-500" /> Anchor Side:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateActiveSlide({
+                      sideImageConfig: { side: 'none' },
+                      mediaItem: slide.mediaItem
+                        ? { ...slide.mediaItem, placement: 'boxed-card' }
+                        : undefined,
+                    });
+                  }}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition ${
+                    !slide.sideImageConfig || slide.sideImageConfig.side === 'none'
+                      ? 'bg-zinc-800 text-white shadow-2xs'
+                      : 'bg-white border border-zinc-300 text-zinc-600 hover:bg-zinc-50'
+                  }`}
+                  title="No side-anchored image"
+                >
+                  None
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateActiveSlide({
+                      sideImageConfig: {
+                        side: 'left',
+                        widthPercent: slide.sideImageConfig?.widthPercent || 38,
+                        controlPoints: slide.sideImageConfig?.controlPoints,
+                      },
+                      mediaItem: slide.mediaItem
+                        ? { ...slide.mediaItem, placement: 'anchor-left', cropFit: 'cover' }
+                        : {
+                            id: `media-${Date.now()}`,
+                            type: 'image',
+                            title: 'Side Visual',
+                            cropFit: 'cover',
+                            frameShape: 'clean',
+                            placement: 'anchor-left',
+                          },
+                    });
+                  }}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 ${
+                    slide.sideImageConfig?.side === 'left' || slide.mediaItem?.placement === 'anchor-left'
+                      ? 'bg-sky-600 text-white shadow-2xs'
+                      : 'bg-white border border-zinc-300 text-zinc-700 hover:bg-zinc-50'
+                  }`}
+                  title="Anchor visual to left side with 3D paper-cut wave"
+                >
+                  <PanelLeftClose size={12} />
+                  <span>Left</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateActiveSlide({
+                      sideImageConfig: {
+                        side: 'right',
+                        widthPercent: slide.sideImageConfig?.widthPercent || 38,
+                        controlPoints: slide.sideImageConfig?.controlPoints,
+                      },
+                      mediaItem: slide.mediaItem
+                        ? { ...slide.mediaItem, placement: 'anchor-right', cropFit: 'cover' }
+                        : {
+                            id: `media-${Date.now()}`,
+                            type: 'image',
+                            title: 'Side Visual',
+                            cropFit: 'cover',
+                            frameShape: 'clean',
+                            placement: 'anchor-right',
+                          },
+                    });
+                  }}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 ${
+                    slide.sideImageConfig?.side === 'right' || slide.mediaItem?.placement === 'anchor-right'
+                      ? 'bg-sky-600 text-white shadow-2xs'
+                      : 'bg-white border border-zinc-300 text-zinc-700 hover:bg-zinc-50'
+                  }`}
+                  title="Anchor visual to right side with 3D paper-cut wave"
+                >
+                  <PanelRightClose size={12} />
+                  <span>Right</span>
+                </button>
+              </div>
             </div>
+
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsNotesCollapsed((v) => !v)}
+                className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold flex items-center gap-1.5 transition ${
+                  isNotesCollapsed
+                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-xs'
+                    : 'bg-white border-zinc-300 text-zinc-700 hover:bg-zinc-50'
+                }`}
+                title={
+                  isNotesCollapsed
+                    ? 'Restore Speaker Notes view'
+                    : 'Collapse Speaker Notes & Maximize Slide Canvas to fill space'
+                }
+              >
+                {isNotesCollapsed ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                <span>{isNotesCollapsed ? 'Standard View' : 'Maximize Canvas'}</span>
+              </button>
+
               {slide.waveControlPoints && slide.waveControlPoints.length > 0 && (
                 <button
                   type="button"
@@ -848,11 +993,32 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                     })
                   }
                   className="px-2.5 py-1 rounded-lg bg-white border border-zinc-300 text-zinc-700 hover:bg-zinc-50 text-[11px] font-bold flex items-center gap-1 transition"
+                  title="Reset background wave curve"
                 >
                   <RotateCcw size={12} />
                   <span>Reset Wave</span>
                 </button>
               )}
+
+              {slide.sideImageConfig?.controlPoints && slide.sideImageConfig.controlPoints.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateActiveSlide({
+                      sideImageConfig: {
+                        ...slide.sideImageConfig!,
+                        controlPoints: undefined,
+                      },
+                    })
+                  }
+                  className="px-2.5 py-1 rounded-lg bg-white border border-sky-300 text-sky-800 hover:bg-sky-50 text-[11px] font-bold flex items-center gap-1 transition"
+                  title="Reset side image paper-cut wave curve"
+                >
+                  <RotateCcw size={12} />
+                  <span>Reset Image Wave</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() =>
@@ -892,7 +1058,11 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
           </div>
 
           {slide.teacherDesignNote && (
-            <div className="w-full max-w-5xl rounded-2xl bg-amber-50 border-2 border-amber-300 px-4 py-3 flex flex-wrap items-start justify-between gap-3 text-xs text-amber-950 shadow-xs">
+            <div
+              className={`w-full ${
+                isNotesCollapsed ? 'max-w-[1600px] 2xl:max-w-[1720px]' : 'max-w-6xl 2xl:max-w-7xl'
+              } rounded-2xl bg-amber-50 border-2 border-amber-300 px-4 py-3 flex flex-wrap items-start justify-between gap-3 text-xs text-amber-950 shadow-xs transition-all duration-300`}
+            >
               <div className="flex items-start gap-2.5 flex-1 min-w-0">
                 <AlertCircle size={16} className="text-amber-700 shrink-0 mt-0.5" />
                 <div>
@@ -933,7 +1103,12 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
             </div>
           )}
 
-          <div className="w-full max-w-5xl rounded-3xl overflow-hidden slide-stage-shadow border border-zinc-300/80 bg-[#FAF6F0]">
+          {/* Dynamic Auto-Expanding Slide Canvas (fills available viewport space) */}
+          <div
+            className={`w-full ${
+              isNotesCollapsed ? 'max-w-[1600px] 2xl:max-w-[1720px]' : 'max-w-6xl 2xl:max-w-7xl'
+            } rounded-3xl overflow-hidden slide-stage-shadow border border-zinc-300/80 bg-[#FAF6F0] transition-all duration-300`}
+          >
             <SlideCanvas
               slide={slide}
               editorPreviewAllAnswers={previewAllAnswers}
@@ -952,31 +1127,87 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
             />
           </div>
 
-          {/* Teacher Speaker Notes & Phase Signal */}
-          <div className="w-full max-w-4xl rounded-2xl bg-white border border-zinc-200 p-4 space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-              <span className="inline-flex items-center gap-1.5 font-bold text-zinc-800">
-                <StickyNote size={14} className="text-amber-600" /> Teacher Speaker Notes
-              </span>
-              <span
-                className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
-                style={{
-                  backgroundColor: palette.softSurface,
-                  color: palette.accent,
-                }}
+          {/* Collapsible Teacher Speaker Notes & Phase Signal */}
+          {isNotesCollapsed ? (
+            <div
+              className={`w-full ${
+                isNotesCollapsed ? 'max-w-[1600px] 2xl:max-w-[1720px]' : 'max-w-6xl 2xl:max-w-7xl'
+              } rounded-2xl bg-white border border-zinc-200 transition-all duration-300 p-2.5 px-4 flex items-center justify-between gap-3 text-xs shadow-2xs`}
+            >
+              <div
+                className="flex items-center gap-2 min-w-0 cursor-pointer flex-1"
+                onClick={() => setIsNotesCollapsed(false)}
+                title="Click to expand speaker notes"
               >
-                Implicit Phase Colour: {palette.name} ({palette.pupilSignal})
-              </span>
+                <StickyNote size={14} className="text-amber-600 shrink-0" />
+                <span className="font-bold text-zinc-800 shrink-0">Speaker Notes:</span>
+                <span className="text-zinc-500 truncate italic">
+                  {slide.speakerNotes ? slide.speakerNotes : 'No notes entered for this slide.'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span
+                  className="px-2 py-0.5 rounded-full text-[10px] font-semibold hidden md:inline-block"
+                  style={{
+                    backgroundColor: palette.softSurface,
+                    color: palette.accent,
+                  }}
+                >
+                  {palette.name} ({palette.pupilSignal})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsNotesCollapsed(false)}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold text-xs flex items-center gap-1 transition"
+                  title="Expand speaker notes"
+                >
+                  <span>Expand</span>
+                  <ChevronUp size={13} />
+                </button>
+              </div>
             </div>
-            <textarea
-              value={slide.speakerNotes}
-              rows={2}
-              onChange={(e) =>
-                updateActiveSlide({ speakerNotes: e.target.value })
-              }
-              className="w-full text-xs text-zinc-700 bg-[#FAF6F0] rounded-xl p-2.5 border border-zinc-200 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
+          ) : (
+            <div
+              className={`w-full ${
+                isNotesCollapsed ? 'max-w-[1600px] 2xl:max-w-[1720px]' : 'max-w-6xl 2xl:max-w-7xl'
+              } rounded-2xl bg-white border border-zinc-200 p-4 space-y-2 transition-all duration-300 shadow-2xs`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 font-bold text-zinc-800">
+                    <StickyNote size={14} className="text-amber-600" /> Teacher Speaker Notes
+                  </span>
+                  <span
+                    className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
+                    style={{
+                      backgroundColor: palette.softSurface,
+                      color: palette.accent,
+                    }}
+                  >
+                    Implicit Phase Colour: {palette.name} ({palette.pupilSignal})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsNotesCollapsed(true)}
+                  className="px-2.5 py-1 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 text-xs font-semibold flex items-center gap-1 transition"
+                  title="Collapse speaker notes to enlarge slide canvas"
+                >
+                  <span>Collapse Notes</span>
+                  <ChevronDown size={13} />
+                </button>
+              </div>
+              <textarea
+                value={slide.speakerNotes}
+                rows={2}
+                onChange={(e) =>
+                  updateActiveSlide({ speakerNotes: e.target.value })
+                }
+                placeholder="Speaker notes and delivery reminders for this slide..."
+                className="w-full text-xs text-zinc-700 bg-[#FAF6F0] rounded-xl p-2.5 border border-zinc-200 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          )}
         </div>
 
         {/* Right Inspector & AI Co-Pilot */}
@@ -1101,6 +1332,160 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                       </button>
                     </div>
                   </div>
+                </div>
+
+                {/* Side-Anchored Visual & Paper-Cut Wave */}
+                <div className="space-y-2 border-t border-zinc-200 pt-3">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-zinc-700 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                      <PanelRightClose size={12} className="text-sky-600" /> Anchored Side Visual
+                    </label>
+                    <span className="text-[10px] text-zinc-500 font-medium">3D Paper-Cut Wave</span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateActiveSlide({
+                          sideImageConfig: { side: 'none' },
+                          mediaItem: slide.mediaItem ? { ...slide.mediaItem, placement: 'boxed-card' } : undefined,
+                        });
+                      }}
+                      className={`py-1.5 rounded-xl font-bold text-xs transition ${
+                        !slide.sideImageConfig || slide.sideImageConfig.side === 'none'
+                          ? 'bg-zinc-800 text-white shadow-xs'
+                          : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                      }`}
+                    >
+                      None
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateActiveSlide({
+                          sideImageConfig: {
+                            side: 'left',
+                            widthPercent: slide.sideImageConfig?.widthPercent || 38,
+                            controlPoints: slide.sideImageConfig?.controlPoints,
+                          },
+                          mediaItem: slide.mediaItem
+                            ? { ...slide.mediaItem, placement: 'anchor-left', cropFit: 'cover' }
+                            : {
+                                id: `media-${Date.now()}`,
+                                type: 'image',
+                                title: 'Side Visual',
+                                cropFit: 'cover',
+                                frameShape: 'clean',
+                                placement: 'anchor-left',
+                              },
+                        });
+                      }}
+                      className={`py-1.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-1 ${
+                        slide.sideImageConfig?.side === 'left' || slide.mediaItem?.placement === 'anchor-left'
+                          ? 'bg-sky-600 text-white shadow-xs'
+                          : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                      }`}
+                    >
+                      <PanelLeftClose size={12} /> Left
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateActiveSlide({
+                          sideImageConfig: {
+                            side: 'right',
+                            widthPercent: slide.sideImageConfig?.widthPercent || 38,
+                            controlPoints: slide.sideImageConfig?.controlPoints,
+                          },
+                          mediaItem: slide.mediaItem
+                            ? { ...slide.mediaItem, placement: 'anchor-right', cropFit: 'cover' }
+                            : {
+                                id: `media-${Date.now()}`,
+                                type: 'image',
+                                title: 'Side Visual',
+                                cropFit: 'cover',
+                                frameShape: 'clean',
+                                placement: 'anchor-right',
+                              },
+                        });
+                      }}
+                      className={`py-1.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-1 ${
+                        slide.sideImageConfig?.side === 'right' || slide.mediaItem?.placement === 'anchor-right'
+                          ? 'bg-sky-600 text-white shadow-xs'
+                          : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                      }`}
+                    >
+                      <PanelRightClose size={12} /> Right
+                    </button>
+                  </div>
+
+                  {(slide.sideImageConfig?.side === 'left' ||
+                    slide.sideImageConfig?.side === 'right' ||
+                    slide.mediaItem?.placement === 'anchor-left' ||
+                    slide.mediaItem?.placement === 'anchor-right') && (
+                    <div className="space-y-2 pt-1 border-t border-zinc-100">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-zinc-600">Side Width:</span>
+                        <span className="font-mono font-bold text-sky-700">
+                          {slide.sideImageConfig?.widthPercent || 38}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={28}
+                        max={48}
+                        step={1}
+                        value={slide.sideImageConfig?.widthPercent || 38}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateActiveSlide({
+                            sideImageConfig: {
+                              ...(slide.sideImageConfig || { side: 'right' }),
+                              side: slide.sideImageConfig?.side || 'right',
+                              widthPercent: val,
+                              controlPoints: slide.sideImageConfig?.controlPoints,
+                            },
+                          });
+                        }}
+                        className="w-full accent-sky-600 cursor-pointer"
+                      />
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMediaTargetElementId('slot-anchored-side-image');
+                            setMediaOpen(true);
+                          }}
+                          className="flex-1 py-1.5 rounded-lg bg-sky-50 border border-sky-300 text-sky-800 hover:bg-sky-100 font-bold text-xs flex items-center justify-center gap-1 transition"
+                        >
+                          <ImageIcon size={12} /> Pick Image
+                        </button>
+                        {slide.sideImageConfig?.controlPoints && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateActiveSlide({
+                                sideImageConfig: {
+                                  ...slide.sideImageConfig!,
+                                  controlPoints: undefined,
+                                },
+                              });
+                            }}
+                            className="px-2 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-xs flex items-center gap-1 transition"
+                            title="Reset image wave curve"
+                          >
+                            <RotateCcw size={11} /> Reset Curve
+                          </button>
+                        )}
+                      </div>
+
+                      <p className="text-[10px] text-zinc-500 leading-tight">
+                        Click <strong className="text-amber-700">Edit Wave Points</strong> in the toolbar above to drag and shape both the background wave (amber) and the image wave (cyan) independently.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Slide Title */}
@@ -1712,6 +2097,34 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                 mediaItem: media,
               });
             }
+            setMediaTargetElementId(null);
+            return;
+          }
+
+          if (
+            mediaTargetElementId === 'slot-anchored-side-image' ||
+            (slide.sideImageConfig && slide.sideImageConfig.side !== 'none') ||
+            slide.mediaItem?.placement === 'anchor-right' ||
+            slide.mediaItem?.placement === 'anchor-left'
+          ) {
+            const side =
+              slide.sideImageConfig?.side && slide.sideImageConfig.side !== 'none'
+                ? slide.sideImageConfig.side
+                : slide.mediaItem?.placement === 'anchor-left'
+                ? 'left'
+                : 'right';
+            updateActiveSlide({
+              sideImageConfig: {
+                side,
+                widthPercent: slide.sideImageConfig?.widthPercent || 38,
+                controlPoints: slide.sideImageConfig?.controlPoints,
+              },
+              mediaItem: {
+                ...media,
+                cropFit: 'cover',
+                placement: side === 'left' ? 'anchor-left' : 'anchor-right',
+              },
+            });
             setMediaTargetElementId(null);
             return;
           }

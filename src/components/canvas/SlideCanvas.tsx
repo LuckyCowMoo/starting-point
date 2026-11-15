@@ -7,6 +7,7 @@ import {
   Code2,
   Database,
   Globe,
+  GripHorizontal,
   HelpCircle,
   ImagePlus,
   Layers,
@@ -16,13 +17,17 @@ import {
   Scale,
   Search,
   Sparkles,
+  Square,
   Target,
+  Trash2,
   Users,
   Workflow,
   X,
 } from 'lucide-react';
 import {
+  BespokeCanvasElement,
   DualCodeIconId,
+  ElementBoxOverride,
   PhasePalette,
   SlideData,
   SlideMediaItem,
@@ -126,8 +131,10 @@ interface SlideCanvasProps {
   interactiveTimer?: boolean;
   editable?: boolean;
   showWavePathEditor?: boolean;
+  selectedElementId?: string | null;
+  onSelectElement?: (id: string | null) => void;
   onUpdateSlide?: (patch: Partial<SlideData>) => void;
-  onOpenMediaPicker?: () => void;
+  onOpenMediaPicker?: (targetElementId?: string) => void;
 }
 
 interface InlineEditableProps {
@@ -360,6 +367,233 @@ const DualCodeBadgeControl: React.FC<DualCodeBadgeControlProps> = ({
   );
 };
 
+type DragMode = 'move' | 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+
+interface ComponentDragSession {
+  slotId: string;
+  mode: DragMode;
+  startClientX: number;
+  startClientY: number;
+  originBox: ElementBoxOverride;
+  minDeltaPx: number;
+  moved: boolean;
+}
+
+const RESIZE_HANDLES: {
+  dir: Exclude<DragMode, 'move'>;
+  style: React.CSSProperties;
+}[] = [
+  { dir: 'nw', style: { left: -12, top: -12, cursor: 'nwse-resize' } },
+  { dir: 'n', style: { left: '50%', top: -12, transform: 'translateX(-50%)', cursor: 'ns-resize' } },
+  { dir: 'ne', style: { right: -12, top: -12, cursor: 'nesw-resize' } },
+  { dir: 'e', style: { right: -12, top: '50%', transform: 'translateY(-50%)', cursor: 'ew-resize' } },
+  { dir: 'se', style: { right: -12, bottom: -12, cursor: 'nwse-resize' } },
+  { dir: 's', style: { left: '50%', bottom: -12, transform: 'translateX(-50%)', cursor: 'ns-resize' } },
+  { dir: 'sw', style: { left: -12, bottom: -12, cursor: 'nesw-resize' } },
+  { dir: 'w', style: { left: -12, top: '50%', transform: 'translateY(-50%)', cursor: 'ew-resize' } },
+];
+
+interface InteractiveSlotProps {
+  id: string;
+  override?: ElementBoxOverride;
+  editable: boolean;
+  isSelected: boolean;
+  isBoxed?: boolean;
+  isBottomLayer?: boolean;
+  showBoxToggle?: boolean;
+  showLayerToggle?: boolean;
+  stretchHeight?: boolean;
+  className?: string;
+  onSelect: () => void;
+  onStartDrag: (
+    e: React.PointerEvent,
+    slotEl: HTMLElement,
+    mode: DragMode,
+    minDeltaPx: number
+  ) => void;
+  onToggleBoxed?: () => void;
+  onToggleLayer?: () => void;
+  onDelete?: () => void;
+  extraActions?: React.ReactNode;
+  children: React.ReactNode;
+}
+
+const InteractiveSlot: React.FC<InteractiveSlotProps> = ({
+  id,
+  override,
+  editable,
+  isSelected,
+  isBoxed = false,
+  isBottomLayer = false,
+  showBoxToggle = false,
+  showLayerToggle = false,
+  stretchHeight = false,
+  className = '',
+  onSelect,
+  onStartDrag,
+  onToggleBoxed,
+  onToggleLayer,
+  onDelete,
+  extraActions,
+  children,
+}) => {
+  const slotRef = useRef<HTMLDivElement>(null);
+
+  const absStyle: React.CSSProperties | undefined = override
+    ? {
+        position: 'absolute',
+        left: override.x,
+        top: override.y,
+        width: override.w,
+        ...(stretchHeight ? { height: override.h } : { minHeight: override.h }),
+        zIndex: isSelected ? 48 : 32,
+      }
+    : undefined;
+
+  if (!editable) {
+    return (
+      <div
+        data-slot-id={id}
+        style={absStyle}
+        className={`${override ? 'pointer-events-auto flex flex-col' : ''} ${className}`}
+      >
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={slotRef}
+      data-slot-id={id}
+      style={absStyle}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        const target = e.target as HTMLElement;
+        if (target.closest('input, textarea, select, button, [data-no-drag]')) {
+          e.stopPropagation();
+          onSelect();
+          return;
+        }
+        e.stopPropagation();
+        onSelect();
+        if (slotRef.current) {
+          onStartDrag(e, slotRef.current, 'move', 6);
+        }
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+      }}
+      className={`group/slot ${override ? '' : 'relative'} transition-shadow pointer-events-auto flex flex-col ${
+        isSelected
+          ? 'ring-3 ring-sky-500 rounded-2xl shadow-lg'
+          : 'hover:ring-2 hover:ring-sky-400/70 rounded-2xl'
+      } ${className}`}
+    >
+      {children}
+
+      {/* PowerPoint / Google Slides Action Toolbar above selected component */}
+      {isSelected && (
+        <div
+          data-no-drag="true"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute -top-12 left-0 z-50 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900/95 text-white shadow-2xl border border-zinc-700 whitespace-nowrap"
+        >
+          <button
+            type="button"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              if (slotRef.current) {
+                onStartDrag(e, slotRef.current, 'move', 0);
+              }
+            }}
+            title="Drag anywhere on the slide"
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[18px] font-bold cursor-grab active:cursor-grabbing"
+          >
+            <GripHorizontal size={20} />
+            <span>Move</span>
+          </button>
+
+          {showBoxToggle && onToggleBoxed && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleBoxed();
+              }}
+              title="Toggle optional background box around text"
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[17px] font-bold transition ${
+                isBoxed
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200'
+              }`}
+            >
+              <Square size={17} />
+              <span>{isBoxed ? 'Boxed' : 'Unboxed'}</span>
+            </button>
+          )}
+
+          {showLayerToggle && onToggleLayer && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleLayer();
+              }}
+              title="Switch ink for light sheet vs dark wave surface"
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[17px] font-bold transition ${
+                isBottomLayer
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200'
+              }`}
+            >
+              <Layers size={17} />
+              <span>{isBottomLayer ? 'White Ink' : 'Dark Ink'}</span>
+            </button>
+          )}
+
+          {extraActions}
+
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              title="Remove component from slide"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-600/90 hover:bg-rose-500 text-white text-[17px] font-bold transition"
+            >
+              <Trash2 size={17} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 8 PowerPoint-style Resize Handles when selected */}
+      {isSelected &&
+        RESIZE_HANDLES.map((h) => (
+          <div
+            key={h.dir}
+            data-no-drag="true"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              if (slotRef.current) {
+                onStartDrag(e, slotRef.current, h.dir, 0);
+              }
+            }}
+            style={h.style}
+            title="Drag to resize"
+            className="absolute z-50 w-6 h-6 rounded-full bg-white border-4 border-sky-600 shadow-lg hover:scale-125 transition-transform"
+          />
+        ))}
+    </div>
+  );
+};
+
 export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   slide,
   isThumbnail = false,
@@ -369,14 +603,28 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   interactiveTimer = true,
   editable = false,
   showWavePathEditor = false,
+  selectedElementId: controlledSelectedId,
+  onSelectElement,
   onUpdateSlide,
   onOpenMediaPicker,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const canvasBoxRef = useRef<HTMLDivElement>(null);
   const svgOverlayRef = useRef<SVGSVGElement>(null);
   const [scale, setScale] = useState(1);
   const [draggingPts, setDraggingPts] = useState<Point[] | null>(null);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
+  const [compDrag, setCompDrag] = useState<ComponentDragSession | null>(null);
+  const lastDraggedAtRef = useRef(0);
+
+  const activeSelectedId =
+    controlledSelectedId !== undefined ? controlledSelectedId : internalSelectedId;
+  const setSelectedId = (id: string | null) => {
+    setInternalSelectedId(id);
+    onSelectElement?.(id);
+  };
+  const canEditComponents = editable && !isThumbnail && !hideWaveBackground;
 
   const palette = PHASE_PALETTES[slide.phase];
   const invert = Boolean(slide.invertWaveLayers);
@@ -494,6 +742,215 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     };
   }, [dragIdx, computedPaper.controlPoints, onUpdateSlide]);
 
+  const latestSlideRef = useRef(slide);
+  const latestUpdateRef = useRef(onUpdateSlide);
+  latestSlideRef.current = slide;
+  latestUpdateRef.current = onUpdateSlide;
+
+  const deleteSlot = (slotId: string) => {
+    const cur = latestSlideRef.current;
+    const upd = latestUpdateRef.current;
+    if (!upd) return;
+
+    const nextLayouts = cur.elementLayouts ? { ...cur.elementLayouts } : undefined;
+    if (nextLayouts) delete nextLayouts[slotId];
+
+    if (cur.bodyBlocks.some((b) => b.id === slotId)) {
+      upd({
+        bodyBlocks: cur.bodyBlocks.filter((b) => b.id !== slotId),
+        elementLayouts: nextLayouts,
+      });
+    } else if (cur.customCanvasElements?.some((el) => el.id === slotId)) {
+      upd({
+        customCanvasElements: cur.customCanvasElements.filter((el) => el.id !== slotId),
+        elementLayouts: nextLayouts,
+      });
+    } else if (slotId === 'slot-media') {
+      upd({
+        mediaItem: undefined,
+        elementLayouts: nextLayouts,
+        hiddenElementIds: [...new Set([...(cur.hiddenElementIds || []), 'slot-media'])],
+      });
+    } else {
+      upd({
+        elementLayouts: nextLayouts,
+        hiddenElementIds: [...new Set([...(cur.hiddenElementIds || []), slotId])],
+      });
+    }
+    setSelectedId(null);
+  };
+
+  useEffect(() => {
+    if (!canEditComponents || !activeSelectedId) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const active = document.activeElement as HTMLElement | null;
+      if (
+        active &&
+        (active.tagName === 'INPUT' ||
+          active.tagName === 'TEXTAREA' ||
+          active.tagName === 'SELECT' ||
+          active.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      deleteSlot(activeSelectedId);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [canEditComponents, activeSelectedId]);
+
+  const handleStartSlotDrag = (
+    slotId: string,
+    e: React.PointerEvent,
+    slotEl: HTMLElement,
+    mode: DragMode,
+    minDeltaPx: number,
+    defaults?: { layer?: 'top' | 'bottom'; boxed?: boolean }
+  ) => {
+    const canvasEl = canvasBoxRef.current;
+    if (!canvasEl || !latestUpdateRef.current) return;
+    const canvasRect = canvasEl.getBoundingClientRect();
+    const slotRect = slotEl.getBoundingClientRect();
+    if (!canvasRect.width || !canvasRect.height) return;
+
+    const existing = latestSlideRef.current.elementLayouts?.[slotId];
+    const originBox: ElementBoxOverride = existing
+      ? { ...existing }
+      : {
+          x: Math.round(((slotRect.left - canvasRect.left) / canvasRect.width) * 1920),
+          y: Math.round(((slotRect.top - canvasRect.top) / canvasRect.height) * 1080),
+          w: Math.max(120, Math.round((slotRect.width / canvasRect.width) * 1920)),
+          h: Math.max(54, Math.round((slotRect.height / canvasRect.height) * 1080)),
+          layer: defaults?.layer,
+          boxed: defaults?.boxed,
+        };
+
+    setCompDrag({
+      slotId,
+      mode,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      originBox,
+      minDeltaPx,
+      moved: false,
+    });
+  };
+
+  useEffect(() => {
+    if (!compDrag) return;
+    let moved = compDrag.moved;
+    const session = compDrag;
+
+    const onMove = (e: PointerEvent) => {
+      const canvasEl = canvasBoxRef.current;
+      const upd = latestUpdateRef.current;
+      const cur = latestSlideRef.current;
+      if (!canvasEl || !upd) return;
+      const dxScreen = e.clientX - session.startClientX;
+      const dyScreen = e.clientY - session.startClientY;
+
+      if (!moved) {
+        if (Math.hypot(dxScreen, dyScreen) < session.minDeltaPx) return;
+        moved = true;
+        lastDraggedAtRef.current = Date.now();
+      } else {
+        lastDraggedAtRef.current = Date.now();
+      }
+
+      const rect = canvasEl.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const dx = (dxScreen / rect.width) * 1920;
+      const dy = (dyScreen / rect.height) * 1080;
+
+      const o = session.originBox;
+      let nextX = o.x;
+      let nextY = o.y;
+      let nextW = o.w;
+      let nextH = o.h;
+
+      if (session.mode === 'move') {
+        nextX = Math.max(-80, Math.min(1820, Math.round(o.x + dx)));
+        nextY = Math.max(-40, Math.min(1000, Math.round(o.y + dy)));
+      } else {
+        const MIN_W = 110;
+        const MIN_H = 52;
+        if (session.mode.includes('e')) {
+          nextW = Math.max(MIN_W, Math.round(o.w + dx));
+        }
+        if (session.mode.includes('s')) {
+          nextH = Math.max(MIN_H, Math.round(o.h + dy));
+        }
+        if (session.mode.includes('w')) {
+          const maxShift = o.w - MIN_W;
+          const clampedDx = Math.min(dx, maxShift);
+          nextX = Math.round(o.x + clampedDx);
+          nextW = Math.round(o.w - clampedDx);
+        }
+        if (session.mode.includes('n')) {
+          const maxShift = o.h - MIN_H;
+          const clampedDy = Math.min(dy, maxShift);
+          nextY = Math.round(o.y + clampedDy);
+          nextH = Math.round(o.h - clampedDy);
+        }
+      }
+
+      const nextBox: ElementBoxOverride = {
+        ...o,
+        x: nextX,
+        y: nextY,
+        w: Math.min(1920, nextW),
+        h: Math.min(1080, nextH),
+      };
+
+      // Sync bespoke custom element % coords if it lives in customCanvasElements
+      const hasCustomEl = cur.customCanvasElements?.some(
+        (el) => el.id === session.slotId
+      );
+      if (hasCustomEl && cur.customCanvasElements) {
+        upd({
+          elementLayouts: {
+            ...(cur.elementLayouts || {}),
+            [session.slotId]: nextBox,
+          },
+          customCanvasElements: cur.customCanvasElements.map((el) =>
+            el.id === session.slotId
+              ? {
+                  ...el,
+                  x: Number(((nextBox.x / 1920) * 100).toFixed(2)),
+                  y: Number(((nextBox.y / 1080) * 100).toFixed(2)),
+                  w: Number(((nextBox.w / 1920) * 100).toFixed(2)),
+                  h: Number(((nextBox.h / 1080) * 100).toFixed(2)),
+                }
+              : el
+          ),
+        });
+      } else {
+        upd({
+          elementLayouts: {
+            ...(cur.elementLayouts || {}),
+            [session.slotId]: nextBox,
+          },
+        });
+      }
+    };
+
+    const onUp = () => {
+      if (moved) {
+        lastDraggedAtRef.current = Date.now();
+      }
+      setCompDrag(null);
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [compDrag]);
+
   const updateBlock = (blockId: string, patch: Partial<SlideTextBlock>) => {
     if (!onUpdateSlide) return;
     onUpdateSlide({
@@ -506,6 +963,122 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   const neutralAccent = hideWaveBackground ? '#334155' : palette.accent;
   const neutralDark = hideWaveBackground ? '#0F172A' : palette.darkInk;
   const neutralBorder = hideWaveBackground ? '#CBD5E1' : palette.borderAccent;
+  const hiddenSet = new Set(slide.hiddenElementIds || []);
+  const movedOverlays: React.ReactNode[] = [];
+
+  const measureSlotBox = (slotId: string): ElementBoxOverride | null => {
+    const canvas = canvasBoxRef.current;
+    if (!canvas) return null;
+    const slotEl = canvas.querySelector<HTMLElement>(`[data-slot-id="${slotId}"]`);
+    if (!slotEl) return null;
+    const cRect = canvas.getBoundingClientRect();
+    const sRect = slotEl.getBoundingClientRect();
+    const s = scale || 1;
+    return {
+      x: Math.round((sRect.left - cRect.left) / s),
+      y: Math.round((sRect.top - cRect.top) / s),
+      w: Math.max(140, Math.round(sRect.width / s)),
+      h: Math.max(56, Math.round(sRect.height / s)),
+    };
+  };
+
+  const updateSlotLayout = (slotId: string, patch: Partial<ElementBoxOverride>) => {
+    const upd = latestUpdateRef.current;
+    const cur = latestSlideRef.current;
+    if (!upd) return;
+    const prev = cur.elementLayouts?.[slotId];
+    const measured = prev ? null : measureSlotBox(slotId);
+    const nextLayouts = {
+      ...(cur.elementLayouts || {}),
+      [slotId]: {
+        x: prev?.x ?? measured?.x ?? 120,
+        y: prev?.y ?? measured?.y ?? 160,
+        w: prev?.w ?? measured?.w ?? 640,
+        h: prev?.h ?? measured?.h ?? 180,
+        ...prev,
+        ...patch,
+      },
+    };
+    upd({ elementLayouts: nextLayouts });
+  };
+
+  interface PlaceSlotOptions {
+    className?: string;
+    showBoxToggle?: boolean;
+    showLayerToggle?: boolean;
+    isBoxed?: boolean;
+    isBottomLayer?: boolean;
+    stretchHeight?: boolean;
+    preserveGridCell?: boolean;
+    onToggleBoxed?: () => void;
+    onToggleLayer?: () => void;
+    onDelete?: () => void;
+    extraActions?: React.ReactNode;
+  }
+
+  const placeSlot = (
+    slotId: string,
+    content: React.ReactNode,
+    opts: PlaceSlotOptions = {}
+  ): React.ReactNode => {
+    if (hiddenSet.has(slotId)) {
+      return opts.preserveGridCell ? (
+        <div key={slotId} className="min-h-0 pointer-events-none" />
+      ) : null;
+    }
+
+    const override = slide.elementLayouts?.[slotId];
+    const isBottom =
+      opts.isBottomLayer !== undefined
+        ? opts.isBottomLayer
+        : override?.layer === 'bottom';
+    const isBoxed =
+      opts.isBoxed !== undefined ? opts.isBoxed : Boolean(override?.boxed);
+
+    const wrapped = (
+      <InteractiveSlot
+        key={slotId}
+        id={slotId}
+        override={override}
+        editable={canEditComponents}
+        isSelected={canEditComponents && activeSelectedId === slotId}
+        isBoxed={isBoxed}
+        isBottomLayer={isBottom}
+        showBoxToggle={opts.showBoxToggle}
+        showLayerToggle={opts.showLayerToggle}
+        stretchHeight={opts.stretchHeight}
+        className={opts.className}
+        onSelect={() => setSelectedId(slotId)}
+        onStartDrag={(e, slotEl, mode, minDelta) =>
+          handleStartSlotDrag(slotId, e, slotEl, mode, minDelta, {
+            layer: isBottom ? 'bottom' : 'top',
+            boxed: isBoxed,
+          })
+        }
+        onToggleBoxed={
+          opts.onToggleBoxed ||
+          (() => updateSlotLayout(slotId, { boxed: !isBoxed }))
+        }
+        onToggleLayer={
+          opts.onToggleLayer ||
+          (() => updateSlotLayout(slotId, { layer: isBottom ? 'top' : 'bottom' }))
+        }
+        onDelete={opts.onDelete || (() => deleteSlot(slotId))}
+        extraActions={opts.extraActions}
+      >
+        {content}
+      </InteractiveSlot>
+    );
+
+    if (override) {
+      movedOverlays.push(wrapped);
+      return opts.preserveGridCell ? (
+        <div key={`${slotId}-spacer`} className="min-h-0 pointer-events-none" />
+      ) : null;
+    }
+
+    return wrapped;
+  };
 
   const renderBulletOrProse = (
     text: string,
@@ -576,7 +1149,9 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     media?: SlideMediaItem,
     sizeClass = 'w-full h-full',
     requiredSlotLabel?: string,
-    slotOnDark = bottomOnDark
+    slotOnDark = bottomOnDark,
+    slotId = 'slot-media',
+    wrapInSlot = true
   ) => {
     const canPick = Boolean(editable && onOpenMediaPicker && !isThumbnail);
 
@@ -600,10 +1175,13 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       );
     }
 
+    if (hiddenSet.has(slotId)) return null;
+
+    let inner: React.ReactNode = null;
     if (!media || media.placement === 'fill-bottom-layer') {
       if (!requiredSlotLabel) return null;
 
-      return (
+      inner = (
         <button
           type="button"
           disabled={!canPick}
@@ -638,126 +1216,121 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           )}
         </button>
       );
-    }
-
-    return (
-      <div
-        onClick={(e) => {
-          if (canPick) {
-            e.stopPropagation();
-            onOpenMediaPicker?.();
-          }
-        }}
-        title={canPick ? 'Click to change visual or SVG diagram' : undefined}
-        className={`relative rounded-3xl overflow-hidden shadow-2xl bg-white border-4 border-white/90 flex flex-col ${sizeClass} ${
-          canPick ? 'cursor-pointer hover:ring-4 hover:ring-amber-400 transition' : ''
-        }`}
-      >
-        {media.type === 'svg-diagram' && media.svgCode ? (
-          <div
-            className="flex-1 w-full h-full flex items-center justify-center p-5 bg-white overflow-hidden"
-            dangerouslySetInnerHTML={{ __html: media.svgCode }}
-          />
-        ) : (
-          <img
-            src={media.url || ''}
-            alt={media.title}
-            className={`w-full h-full ${
-              media.cropFit === 'contain' ? 'object-contain bg-white' : 'object-cover'
-            }`}
-          />
-        )}
-      </div>
-    );
-  };
-
-  const renderCard = (b: SlideTextBlock, index: number, isTimeline = false) => {
-    const onDark = b.layer === 'bottom' ? bottomOnDark : topOnDark;
-    const textColor = onDark ? '#FFFFFF' : neutralDark;
-    const headingColor = onDark ? '#FFFFFF' : neutralAccent;
-    const cleanHeading =
-      b.heading && !isGenericMetaHeading(b.heading) ? b.heading : '';
-    const isPlainBlock =
-      !isTimeline &&
-      (b.style === 'plain' ||
-        (!b.style &&
-          slide.phase === 'explanation' &&
-          slide.presetId !== 'comparison-two-column'));
-
-    if (isPlainBlock) {
-      return (
-        <div key={b.id} className="px-2 py-2 space-y-2.5 transition-all">
-          {(cleanHeading || b.dualCodeIcon || (editable && !isThumbnail)) && (
-            <div className="flex items-center gap-4 min-w-0">
-              <DualCodeBadgeControl
-                iconId={b.dualCodeIcon}
-                accentColor={neutralAccent}
-                onDarkSurface={onDark}
-                editable={editable && !isThumbnail}
-                onChangeIcon={(nextIcon) =>
-                  updateBlock(b.id, { dualCodeIcon: nextIcon })
-                }
-              />
-              {cleanHeading ? (
-                <h3
-                  className="text-[38px] font-extrabold leading-tight flex-1"
-                  style={{ color: headingColor }}
-                >
-                  <InlineEditableText
-                    value={cleanHeading}
-                    editable={editable && !isThumbnail}
-                    onCommit={(next) => updateBlock(b.id, { heading: next })}
-                  />
-                </h3>
-              ) : null}
-            </div>
-          )}
-
-          {renderBulletOrProse(
-            b.content,
-            textColor,
-            'text-[33px]',
-            onDark,
-            (next) => updateBlock(b.id, { content: next })
+    } else {
+      inner = (
+        <div
+          onClick={(e) => {
+            if (canPick) {
+              e.stopPropagation();
+              onOpenMediaPicker?.();
+            }
+          }}
+          title={canPick ? 'Click to change visual or SVG diagram' : undefined}
+          className={`relative rounded-3xl overflow-hidden shadow-2xl bg-white border-4 border-white/90 flex flex-col w-full h-full flex-1 ${
+            canPick ? 'cursor-pointer transition' : ''
+          }`}
+        >
+          {media.type === 'svg-diagram' && media.svgCode ? (
+            <div
+              className="flex-1 w-full h-full flex items-center justify-center p-5 bg-white overflow-hidden"
+              dangerouslySetInnerHTML={{ __html: media.svgCode }}
+            />
+          ) : (
+            <img
+              src={media.url || ''}
+              alt={media.title}
+              className={`w-full h-full ${
+                media.cropFit === 'contain' ? 'object-contain bg-white' : 'object-cover'
+              }`}
+            />
           )}
         </div>
       );
     }
 
-    return (
-      <div
-        key={b.id}
-        className={`rounded-3xl p-8 transition-all ${
+    if (!wrapInSlot) return inner;
+    const isMoved = Boolean(slide.elementLayouts?.[slotId]);
+    return placeSlot(slotId, inner, {
+      stretchHeight: true,
+      className: isMoved ? '' : sizeClass,
+      extraActions: canPick ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenMediaPicker?.();
+          }}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[17px] font-bold"
+        >
+          <ImagePlus size={16} />
+          <span>Change Visual</span>
+        </button>
+      ) : undefined,
+    });
+  };
+
+  const renderCard = (b: SlideTextBlock, index: number, isTimeline = false) => {
+    const override = slide.elementLayouts?.[b.id];
+    const effectiveLayer = override?.layer ?? b.layer ?? 'top';
+    const onDark = effectiveLayer === 'bottom' ? bottomOnDark : topOnDark;
+    const isCode = b.style === 'code';
+    const isBoxed =
+      override?.boxed !== undefined ? override.boxed : b.style === 'boxed';
+    const isHighlight = !isBoxed && (b.style === 'highlight' || b.style === 'challenge');
+    const showStepBadge = isTimeline || b.style === 'step';
+
+    const textColor = isCode ? '#A7F3D0' : onDark ? '#FFFFFF' : neutralDark;
+    const headingColor = isCode ? '#34D399' : onDark ? '#FFFFFF' : neutralAccent;
+    const cleanHeading =
+      b.heading && !isGenericMetaHeading(b.heading) ? b.heading : '';
+
+    const containerClasses = isBoxed
+      ? `rounded-3xl p-7 transition-all border-2 shadow-lg ${
           onDark
-            ? 'bg-white/14 backdrop-blur-md border-2 border-white/30 shadow-xl'
-            : hideWaveBackground
-            ? 'bg-white border-2 border-slate-300 shadow-xs'
-            : 'bg-white/92 backdrop-blur-xs border-2 shadow-lg'
-        } ${b.style === 'highlight' ? 'border-l-[10px]' : ''}`}
+            ? 'bg-white/14 backdrop-blur-md border-white/30'
+            : 'bg-white/95 backdrop-blur-xs'
+        }`
+      : isCode
+      ? 'rounded-2xl p-6 bg-zinc-950 text-emerald-300 font-mono border border-zinc-800 shadow-lg'
+      : hideWaveBackground
+      ? 'rounded-2xl p-5 border-2 border-dashed border-slate-300 bg-white/65'
+      : isHighlight
+      ? 'border-l-[8px] pl-6 py-1.5 transition-all'
+      : 'px-2 py-1.5 transition-all';
+
+    const cardContent = (
+      <div
+        className={`${containerClasses} space-y-2.5`}
         style={{
-          borderColor: onDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
-          borderLeftColor:
-            b.style === 'highlight'
-              ? onDark
-                ? '#FFFFFF'
-                : neutralAccent
-              : undefined,
+          borderColor: isBoxed
+            ? onDark
+              ? 'rgba(255,255,255,0.28)'
+              : neutralBorder
+            : undefined,
+          borderLeftColor: isHighlight
+            ? onDark
+              ? '#FFFFFF'
+              : neutralAccent
+            : undefined,
         }}
       >
-        {(isTimeline || cleanHeading || b.dualCodeIcon) && (
-          <div className="flex items-start justify-between gap-4 mb-3">
-            <div className="flex items-center gap-4 min-w-0 flex-1">
-              {isTimeline && (
-                <span
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center font-extrabold text-[27px] shrink-0"
-                  style={{
-                    backgroundColor: onDark ? '#FFFFFF' : neutralAccent,
-                    color: onDark ? palette.layers[3] : '#FFFFFF',
-                  }}
-                >
-                  {index + 1}
-                </span>
-              )}
+        {(showStepBadge ||
+          cleanHeading ||
+          b.dualCodeIcon ||
+          (canEditComponents && activeSelectedId === b.id)) && (
+          <div className="flex items-center gap-4 min-w-0">
+            {showStepBadge && (
+              <span
+                className="w-11 h-11 rounded-2xl flex items-center justify-center font-extrabold text-[26px] shrink-0"
+                style={{
+                  backgroundColor: onDark ? '#FFFFFF' : neutralAccent,
+                  color: onDark ? palette.layers[3] : '#FFFFFF',
+                }}
+              >
+                {index + 1}
+              </span>
+            )}
+            {(b.dualCodeIcon || (canEditComponents && activeSelectedId === b.id)) && (
               <DualCodeBadgeControl
                 iconId={b.dualCodeIcon}
                 accentColor={neutralAccent}
@@ -767,43 +1340,64 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                   updateBlock(b.id, { dualCodeIcon: nextIcon })
                 }
               />
-              {cleanHeading ? (
-                <h3
-                  className="text-[35px] font-extrabold leading-tight flex-1"
-                  style={{ color: headingColor }}
-                >
-                  <InlineEditableText
-                    value={cleanHeading}
-                    editable={editable && !isThumbnail}
-                    onCommit={(next) => updateBlock(b.id, { heading: next })}
-                  />
-                </h3>
-              ) : editable && !isThumbnail ? (
-                <h3
-                  className="text-[28px] font-bold leading-tight opacity-55"
-                  style={{ color: headingColor }}
-                >
-                  <InlineEditableText
-                    value=""
-                    placeholder="+ Add optional heading"
-                    editable={editable}
-                    onCommit={(next) => updateBlock(b.id, { heading: next })}
-                  />
-                </h3>
-              ) : null}
-            </div>
+            )}
+            {cleanHeading ? (
+              <h3
+                className="text-[36px] font-extrabold leading-tight flex-1"
+                style={{ color: headingColor }}
+              >
+                <InlineEditableText
+                  value={cleanHeading}
+                  editable={editable && !isThumbnail}
+                  onCommit={(next) => updateBlock(b.id, { heading: next })}
+                />
+              </h3>
+            ) : canEditComponents ? (
+              <h3
+                className={`text-[28px] font-bold leading-tight transition-opacity ${
+                  activeSelectedId === b.id
+                    ? 'opacity-65'
+                    : 'opacity-0 group-hover/slot:opacity-55'
+                }`}
+                style={{ color: headingColor }}
+              >
+                <InlineEditableText
+                  value=""
+                  placeholder="+ Add heading"
+                  editable={editable}
+                  onCommit={(next) => updateBlock(b.id, { heading: next })}
+                />
+              </h3>
+            ) : null}
           </div>
         )}
 
         {renderBulletOrProse(
           b.content,
           textColor,
-          'text-[30px]',
+          isTimeline ? 'text-[29px]' : 'text-[32px]',
           onDark,
           (next) => updateBlock(b.id, { content: next })
         )}
       </div>
     );
+
+    return placeSlot(b.id, cardContent, {
+      showBoxToggle: true,
+      showLayerToggle: true,
+      isBoxed,
+      isBottomLayer: effectiveLayer === 'bottom',
+      onToggleBoxed: () => {
+        const nextBoxed = !isBoxed;
+        updateBlock(b.id, { style: nextBoxed ? 'boxed' : 'plain' });
+        if (override) updateSlotLayout(b.id, { boxed: nextBoxed });
+      },
+      onToggleLayer: () => {
+        const nextLayer = effectiveLayer === 'bottom' ? 'top' : 'bottom';
+        updateBlock(b.id, { layer: nextLayer });
+        if (override) updateSlotLayout(b.id, { layer: nextLayer });
+      },
+    });
   };
 
   const renderHeader = () => {
@@ -816,45 +1410,94 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         ? 'pl-[470px] pr-20 pt-9'
         : 'px-20 pt-9';
 
+    const titleOverride = slide.elementLayouts?.['slot-title'];
+    const titleOnDark = titleOverride?.layer
+      ? titleOverride.layer === 'bottom'
+      : headerOnDark;
+    const titleBoxed = Boolean(titleOverride?.boxed);
+
+    const hasControls =
+      (!isTitlePage && Boolean(slide.routineIcons && slide.routineIcons.length > 0)) ||
+      Boolean(slide.timerSeconds && slide.timerSeconds > 0);
+    const controlsOverride = slide.elementLayouts?.['slot-controls'];
+    const controlsOnDark = controlsOverride?.layer
+      ? controlsOverride.layer === 'bottom'
+      : headerOnDark;
+
     return (
       <div className={`relative z-20 flex items-start justify-between ${headerPad}`}>
-        <div className="max-w-[1100px] min-w-0">
-          <h1
-            className={`font-extrabold tracking-tight leading-[1.08] ${
-              isStarter ? 'text-[52px]' : 'text-[60px]'
-            }`}
-            style={{ color: headerOnDark ? '#FFFFFF' : neutralDark }}
+        {placeSlot(
+          'slot-title',
+          <div
+            className={
+              titleBoxed
+                ? `rounded-3xl px-7 py-3.5 border-2 shadow-lg ${
+                    titleOnDark
+                      ? 'bg-white/14 backdrop-blur-md border-white/30'
+                      : 'bg-white/95'
+                  }`
+                : hideWaveBackground
+                ? 'rounded-2xl px-4 py-1.5 border-2 border-dashed border-slate-300 bg-white/55'
+                : ''
+            }
+            style={
+              titleBoxed && !titleOnDark ? { borderColor: neutralBorder } : undefined
+            }
           >
-            <InlineEditableText
-              value={slide.title}
-              editable={editable && !isThumbnail}
-              onCommit={(next) => onUpdateSlide?.({ title: next })}
-            />
-          </h1>
-        </div>
+            <h1
+              className={`font-extrabold tracking-tight leading-[1.08] ${
+                isStarter ? 'text-[52px]' : 'text-[60px]'
+              }`}
+              style={{ color: titleOnDark ? '#FFFFFF' : neutralDark }}
+            >
+              <InlineEditableText
+                value={slide.title}
+                editable={editable && !isThumbnail}
+                onCommit={(next) => onUpdateSlide?.({ title: next })}
+              />
+            </h1>
+          </div>,
+          {
+            className: titleOverride ? '' : 'max-w-[1100px] min-w-0',
+            showBoxToggle: true,
+            showLayerToggle: true,
+            isBoxed: titleBoxed,
+            isBottomLayer: titleOnDark,
+          }
+        )}
 
-        <div className="flex items-center gap-4 shrink-0 ml-6">
-          {!isTitlePage && slide.routineIcons && slide.routineIcons.length > 0 && (
-            <div className="flex items-center gap-2.5">
-              {slide.routineIcons.slice(0, 3).map((ri) => (
-                <RoutineBadgeIcon
-                  key={ri}
-                  type={ri}
-                  monochromeCorner
-                  onDark={headerOnDark}
+        {hasControls &&
+          placeSlot(
+            'slot-controls',
+            <div className="flex items-center gap-4">
+              {!isTitlePage && slide.routineIcons && slide.routineIcons.length > 0 && (
+                <div className="flex items-center gap-2.5">
+                  {slide.routineIcons.slice(0, 3).map((ri) => (
+                    <RoutineBadgeIcon
+                      key={ri}
+                      type={ri}
+                      monochromeCorner
+                      onDark={controlsOnDark}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {slide.timerSeconds && slide.timerSeconds > 0 && (
+                <SlideTimerWidget
+                  initialSeconds={slide.timerSeconds}
+                  accentColor={neutralAccent}
+                  interactive={interactiveTimer && !isThumbnail}
                 />
-              ))}
-            </div>
+              )}
+            </div>,
+            {
+              className: controlsOverride ? '' : 'shrink-0 ml-auto pl-6',
+              showBoxToggle: false,
+              showLayerToggle: true,
+              isBottomLayer: controlsOnDark,
+            }
           )}
-
-          {slide.timerSeconds && slide.timerSeconds > 0 && (
-            <SlideTimerWidget
-              initialSeconds={slide.timerSeconds}
-              accentColor={neutralAccent}
-              interactive={interactiveTimer && !isThumbnail}
-            />
-          )}
-        </div>
       </div>
     );
   };
@@ -868,7 +1511,29 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     });
     const dateValue = slide.lessonDate || todayFallback;
     const isCoverFilledInWave =
-      !hideWaveBackground && Boolean(effectiveMedia) && effectiveMedia?.placement === 'fill-bottom-layer';
+      !hideWaveBackground &&
+      Boolean(effectiveMedia) &&
+      effectiveMedia?.placement === 'fill-bottom-layer';
+
+    const dateOverride = slide.elementLayouts?.['slot-date'];
+    const dateOnDark = dateOverride?.layer ? dateOverride.layer === 'bottom' : topOnDark;
+    const dateBoxed = Boolean(dateOverride?.boxed);
+
+    const titleOverride = slide.elementLayouts?.['slot-title'];
+    const titleOnDark = titleOverride?.layer
+      ? titleOverride.layer === 'bottom'
+      : topOnDark;
+    const titleBoxed = Boolean(titleOverride?.boxed);
+
+    const bigQOverride = slide.elementLayouts?.['slot-big-question'];
+    const bigQOnDark = bigQOverride?.layer ? bigQOverride.layer === 'bottom' : topOnDark;
+    const bigQBoxed = Boolean(bigQOverride?.boxed);
+
+    const termsOverride = slide.elementLayouts?.['slot-terms-inline'];
+    const termsOnDark = termsOverride?.layer
+      ? termsOverride.layer === 'bottom'
+      : topOnDark;
+    const termsBoxed = Boolean(termsOverride?.boxed);
 
     return (
       <div className="relative z-20 h-full flex flex-row items-stretch px-20 py-14 gap-12">
@@ -879,90 +1544,179 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           }`}
         >
           <div className="space-y-7 max-w-[840px]">
-            <div
-              className={`inline-flex items-center gap-3 px-6 py-2.5 rounded-full text-[27px] font-bold border-2 shadow-sm ${
-                topOnDark ? 'bg-white/15 text-white border-white/30' : 'bg-white'
-              }`}
-              style={
-                topOnDark
-                  ? undefined
-                  : { borderColor: neutralBorder, color: neutralAccent }
-              }
-            >
-              <Clock size={26} />
-              <InlineEditableText
-                value={dateValue}
-                editable={editable && !isThumbnail}
-                onCommit={(next) => onUpdateSlide?.({ lessonDate: next })}
-              />
-            </div>
-
-            <h1
-              className="text-[74px] font-extrabold leading-[1.05] tracking-tight"
-              style={{ color: topOnDark ? '#FFFFFF' : neutralDark }}
-            >
-              <InlineEditableText
-                value={slide.title}
-                editable={editable && !isThumbnail}
-                onCommit={(next) => onUpdateSlide?.({ title: next })}
-              />
-            </h1>
-
-            {(slide.bigQuestion || (editable && !isThumbnail)) && (
+            {placeSlot(
+              'slot-date',
               <div
-                className={`p-8 rounded-3xl border-l-[12px] shadow-lg ${
-                  topOnDark
-                    ? 'bg-white/14 backdrop-blur-md border-y border-r border-white/25'
+                className={
+                  dateBoxed
+                    ? `inline-flex items-center gap-3 px-6 py-2.5 rounded-full text-[27px] font-bold border-2 shadow-sm ${
+                        dateOnDark ? 'bg-white/15 text-white border-white/30' : 'bg-white'
+                      }`
                     : hideWaveBackground
-                    ? 'bg-white border-y border-r border-slate-200'
-                    : 'bg-white/95'
-                }`}
-                style={{ borderLeftColor: topOnDark ? '#FFFFFF' : neutralAccent }}
+                    ? 'inline-flex items-center gap-3 px-5 py-2 rounded-full text-[27px] font-bold border-2 border-dashed border-slate-300 bg-white/60'
+                    : 'inline-flex items-center gap-3 text-[28px] font-extrabold'
+                }
+                style={
+                  dateOnDark
+                    ? { color: '#FFFFFF' }
+                    : dateBoxed
+                    ? { borderColor: neutralBorder, color: neutralAccent }
+                    : { color: neutralAccent }
+                }
               >
-                <div
-                  className="text-[22px] font-extrabold uppercase tracking-wider mb-2"
-                  style={{ color: topOnDark ? '#FFFFFF' : neutralAccent }}
-                >
-                  Today&apos;s Enquiry
-                </div>
-                <p
-                  className="text-[36px] font-bold leading-snug"
-                  style={{ color: topOnDark ? '#FFFFFF' : neutralDark }}
+                <Clock size={26} />
+                <InlineEditableText
+                  value={dateValue}
+                  editable={editable && !isThumbnail}
+                  onCommit={(next) => onUpdateSlide?.({ lessonDate: next })}
+                />
+              </div>,
+              {
+                className: 'self-start',
+                showBoxToggle: true,
+                showLayerToggle: true,
+                isBoxed: dateBoxed,
+                isBottomLayer: dateOnDark,
+              }
+            )}
+
+            {placeSlot(
+              'slot-title',
+              <div
+                className={
+                  titleBoxed
+                    ? `rounded-3xl p-6 border-2 shadow-lg ${
+                        titleOnDark
+                          ? 'bg-white/14 backdrop-blur-md border-white/30'
+                          : 'bg-white/95'
+                      }`
+                    : hideWaveBackground
+                    ? 'rounded-2xl p-4 border-2 border-dashed border-slate-300 bg-white/55'
+                    : ''
+                }
+                style={
+                  titleBoxed && !titleOnDark ? { borderColor: neutralBorder } : undefined
+                }
+              >
+                <h1
+                  className="text-[74px] font-extrabold leading-[1.05] tracking-tight"
+                  style={{ color: titleOnDark ? '#FFFFFF' : neutralDark }}
                 >
                   <InlineEditableText
-                    value={slide.bigQuestion || ''}
-                    placeholder="Add lesson hook / enquiry question..."
+                    value={slide.title}
                     editable={editable && !isThumbnail}
-                    multiline
-                    onCommit={(next) => onUpdateSlide?.({ bigQuestion: next })}
+                    onCommit={(next) => onUpdateSlide?.({ title: next })}
                   />
-                </p>
-              </div>
+                </h1>
+              </div>,
+              {
+                showBoxToggle: true,
+                showLayerToggle: true,
+                isBoxed: titleBoxed,
+                isBottomLayer: titleOnDark,
+              }
             )}
+
+            {(slide.bigQuestion || (editable && !isThumbnail)) &&
+              placeSlot(
+                'slot-big-question',
+                <div
+                  className={
+                    bigQBoxed
+                      ? `p-8 rounded-3xl border-l-[12px] shadow-lg ${
+                          bigQOnDark
+                            ? 'bg-white/14 backdrop-blur-md border-y border-r border-white/25'
+                            : 'bg-white/95'
+                        }`
+                      : hideWaveBackground
+                      ? 'p-6 rounded-2xl border-2 border-dashed border-slate-300 border-l-[10px] bg-white/65'
+                      : 'border-l-[9px] pl-6 py-1'
+                  }
+                  style={{ borderLeftColor: bigQOnDark ? '#FFFFFF' : neutralAccent }}
+                >
+                  <div
+                    className="text-[22px] font-extrabold uppercase tracking-wider mb-2"
+                    style={{ color: bigQOnDark ? '#FFFFFF' : neutralAccent }}
+                  >
+                    Today&apos;s Enquiry
+                  </div>
+                  <p
+                    className="text-[36px] font-bold leading-snug"
+                    style={{ color: bigQOnDark ? '#FFFFFF' : neutralDark }}
+                  >
+                    <InlineEditableText
+                      value={slide.bigQuestion || ''}
+                      placeholder="Add lesson hook / enquiry question..."
+                      editable={editable && !isThumbnail}
+                      multiline
+                      onCommit={(next) => onUpdateSlide?.({ bigQuestion: next })}
+                    />
+                  </p>
+                </div>,
+                {
+                  showBoxToggle: true,
+                  showLayerToggle: true,
+                  isBoxed: bigQBoxed,
+                  isBottomLayer: bigQOnDark,
+                }
+              )}
           </div>
 
-          {slide.keyTermsStrip && slide.keyTermsStrip.length > 0 && (
-            <div className="flex flex-wrap gap-3.5 max-w-[840px]">
-              {slide.keyTermsStrip.map((kt, i) => (
-                <div
-                  key={i}
-                  className={`px-6 py-3 rounded-2xl border-2 shadow-sm text-[25px] ${
-                    topOnDark
-                      ? 'bg-white/16 border-white/30 text-white'
-                      : 'bg-white/95'
-                  }`}
-                  style={topOnDark ? undefined : { borderColor: neutralBorder }}
-                >
-                  <span
-                    className="font-extrabold"
-                    style={{ color: topOnDark ? '#FFFFFF' : neutralAccent }}
-                  >
-                    {kt.term}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+          {slide.keyTermsStrip &&
+            slide.keyTermsStrip.length > 0 &&
+            placeSlot(
+              'slot-terms-inline',
+              <div
+                className={
+                  termsBoxed
+                    ? 'flex flex-wrap gap-3.5 max-w-[840px]'
+                    : hideWaveBackground
+                    ? 'flex flex-wrap gap-3 p-4 rounded-2xl border-2 border-dashed border-slate-300 bg-white/55 max-w-[840px]'
+                    : 'flex flex-wrap items-center gap-x-5 gap-y-2 max-w-[840px]'
+                }
+              >
+                {slide.keyTermsStrip.map((kt, i) =>
+                  termsBoxed ? (
+                    <div
+                      key={i}
+                      className={`px-6 py-3 rounded-2xl border-2 shadow-sm text-[25px] ${
+                        termsOnDark ? 'bg-white/16 border-white/30 text-white' : 'bg-white/95'
+                      }`}
+                      style={termsOnDark ? undefined : { borderColor: neutralBorder }}
+                    >
+                      <span
+                        className="font-extrabold"
+                        style={{ color: termsOnDark ? '#FFFFFF' : neutralAccent }}
+                      >
+                        {kt.term}
+                      </span>
+                    </div>
+                  ) : (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-3 text-[27px] font-extrabold"
+                      style={{ color: termsOnDark ? '#FFFFFF' : neutralAccent }}
+                    >
+                      {i > 0 && (
+                        <span
+                          className="w-2 h-2 rounded-full opacity-55"
+                          style={{
+                            backgroundColor: termsOnDark ? '#FFFFFF' : neutralAccent,
+                          }}
+                        />
+                      )}
+                      <span>{kt.term}</span>
+                    </span>
+                  )
+                )}
+              </div>,
+              {
+                showBoxToggle: true,
+                showLayerToggle: true,
+                isBoxed: termsBoxed,
+                isBottomLayer: termsOnDark,
+              }
+            )}
         </div>
 
         {/* Right Cover Area: Cropped inside bottom coloured wave by default; wireframe image zone shown in Step 1 picker */}
@@ -972,6 +1726,8 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               effectiveMedia,
               'w-full h-[820px]',
               'Intended Cover Image Area',
+              false,
+              'slot-media',
               false
             )
           ) : isCoverFilledInWave ? (
@@ -996,14 +1752,18 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               effectiveMedia,
               'w-full h-[820px]',
               'Lesson Cover Visual',
-              bottomOnDark
+              bottomOnDark,
+              'slot-media',
+              true
             )
           ) : (
             renderMediaFrame(
               undefined,
               'w-full h-[820px]',
               'Lesson Cover Visual',
-              bottomOnDark
+              bottomOnDark,
+              'slot-media',
+              true
             )
           )}
         </div>
@@ -1025,79 +1785,8 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       return renderLessonTitlePage(p);
     }
 
-    if (slide.presetId === 'custom' && slide.customCanvasElements) {
-      return (
-        <div className="relative z-20 flex-1">
-          {slide.customCanvasElements.map((el) => {
-            const onDark = el.layer === 'bottom' ? bottomOnDark : topOnDark;
-            return (
-              <div
-                key={el.id}
-                className="absolute rounded-3xl p-6 shadow-md"
-                style={{
-                  left: `${el.x}%`,
-                  top: `${el.y}%`,
-                  width: `${el.w}%`,
-                  height: `${el.h}%`,
-                  backgroundColor:
-                    hideWaveBackground
-                      ? '#FFFFFF'
-                      : el.tone === 'tinted'
-                      ? p.softSurface
-                      : el.tone === 'dark' || onDark
-                      ? 'rgba(255,255,255,0.16)'
-                      : 'rgba(255,255,255,0.92)',
-                  color: onDark ? '#FFFFFF' : neutralDark,
-                  border: `2px solid ${
-                    onDark ? 'rgba(255,255,255,0.28)' : neutralBorder
-                  }`,
-                }}
-              >
-                {el.heading && (
-                  <h4
-                    className="text-[32px] font-extrabold mb-2.5"
-                    style={{ color: onDark ? '#FFFFFF' : neutralAccent }}
-                  >
-                    <InlineEditableText
-                      value={el.heading}
-                      editable={editable && !isThumbnail}
-                      onCommit={(next) =>
-                        onUpdateSlide?.({
-                          customCanvasElements: slide.customCanvasElements?.map((c) =>
-                            c.id === el.id ? { ...c, heading: next } : c
-                          ),
-                        })
-                      }
-                    />
-                  </h4>
-                )}
-                {el.content && (
-                  <p className="text-[28px] leading-snug font-medium">
-                    <InlineEditableText
-                      value={el.content}
-                      editable={editable && !isThumbnail}
-                      multiline
-                      onCommit={(next) =>
-                        onUpdateSlide?.({
-                          customCanvasElements: slide.customCanvasElements?.map((c) =>
-                            c.id === el.id ? { ...c, content: next } : c
-                          ),
-                        })
-                      }
-                    />
-                  </p>
-                )}
-                {el.svgCode && (
-                  <div
-                    className="w-full h-full flex items-center justify-center"
-                    dangerouslySetInnerHTML={{ __html: el.svgCode }}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      );
+    if (slide.presetId === 'custom') {
+      return <div className="relative z-20 flex-1 pointer-events-none" />;
     }
 
     if (slide.presetId === 'mwb-starter-quadrant') {
@@ -1110,8 +1799,14 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               : 'px-20 pb-[130px]'
           }`}
         >
-          <div className="grid grid-cols-2 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-5 flex-1 min-h-0">
+          <div className="grid grid-cols-2 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-x-10 gap-y-6 flex-1 min-h-0">
             {quads.slice(0, 4).map((q, idx) => {
+              const slotId = `slot-quad-${idx}`;
+              const quadOverride = slide.elementLayouts?.[slotId];
+              const quadOnDark = quadOverride?.layer
+                ? quadOverride.layer === 'bottom'
+                : topOnDark;
+              const quadBoxed = Boolean(quadOverride?.boxed);
               const revealed = editorPreviewAllAnswers || idx < starterRevealedCount;
               const cleanQuestion = stripStarterMetaPrefix(q.question);
               const qLen = cleanQuestion.length;
@@ -1127,25 +1822,32 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 : 0;
               const optTextClass =
                 maxOptLen > 34
-                  ? 'text-[20px] leading-tight py-2 px-3.5'
-                  : 'text-[23px] leading-snug py-2.5 px-4';
+                  ? 'text-[20px] leading-tight py-1.5 px-3'
+                  : 'text-[23px] leading-snug py-2 px-3.5';
 
-              return (
+              const quadNode = (
                 <div
-                  key={q.id}
-                  className={`rounded-3xl border-2 px-6 py-4 shadow-md flex flex-col justify-between gap-2.5 min-h-0 overflow-hidden ${
-                    topOnDark
-                      ? 'bg-white/14 backdrop-blur-md border-white/30'
-                      : 'bg-white/95'
+                  className={`flex flex-col justify-between gap-2.5 min-h-0 h-full overflow-hidden ${
+                    quadBoxed
+                      ? `rounded-3xl border-2 px-6 py-4 shadow-md ${
+                          quadOnDark
+                            ? 'bg-white/14 backdrop-blur-md border-white/30'
+                            : 'bg-white/95'
+                        }`
+                      : hideWaveBackground
+                      ? 'rounded-2xl border-2 border-dashed border-slate-300 px-5 py-3.5 bg-white/60'
+                      : 'px-2 py-2'
                   }`}
-                  style={topOnDark ? undefined : { borderColor: neutralBorder }}
+                  style={
+                    quadBoxed && !quadOnDark ? { borderColor: neutralBorder } : undefined
+                  }
                 >
                   <div className="flex items-start gap-3.5 shrink-0">
                     <span
                       className="w-11 h-11 rounded-2xl flex items-center justify-center font-extrabold text-[27px] shrink-0"
                       style={{
-                        backgroundColor: topOnDark ? '#FFFFFF' : neutralAccent,
-                        color: topOnDark ? palette.layers[3] : '#FFFFFF',
+                        backgroundColor: quadOnDark ? '#FFFFFF' : neutralAccent,
+                        color: quadOnDark ? palette.layers[3] : '#FFFFFF',
                       }}
                     >
                       {idx + 1}
@@ -1153,7 +1855,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                     <div className="flex-1 min-w-0">
                       <p
                         className={`${qTextClass} font-bold`}
-                        style={{ color: topOnDark ? '#FFFFFF' : neutralDark }}
+                        style={{ color: quadOnDark ? '#FFFFFF' : neutralDark }}
                       >
                         <InlineEditableText
                           value={cleanQuestion}
@@ -1172,32 +1874,32 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                   </div>
 
                   {hasMcOptions ? (
-                    <div className="grid grid-cols-2 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-2.5 pl-[56px] flex-1 min-h-0">
+                    <div className="grid grid-cols-2 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-x-4 gap-y-2 pl-[56px] flex-1 min-h-0">
                       {q.options!.slice(0, 4).map((opt, oi) => {
                         const letter = String.fromCharCode(65 + oi);
                         const cleanOptText = opt.replace(/^[A-D][\s.):\-]+/i, '');
                         const isCorrect = isMcOptionCorrect(opt, oi, q.answer);
 
-                        let pillClass = topOnDark
-                          ? 'bg-white/14 border-white/30 text-white'
-                          : 'bg-[#FAF6F0] border-zinc-200 text-zinc-900';
+                        let pillClass = quadOnDark
+                          ? 'text-white hover:bg-white/10'
+                          : 'text-zinc-900 hover:bg-black/5';
                         let badgeClass = '';
                         let badgeStyle: React.CSSProperties = {
-                          color: topOnDark ? '#FFFFFF' : neutralAccent,
+                          color: quadOnDark ? '#FFFFFF' : neutralAccent,
                         };
 
                         if (revealed) {
                           if (isCorrect) {
                             pillClass =
-                              'bg-emerald-600 border-emerald-700 text-white shadow-md ring-2 ring-emerald-400/30';
+                              'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400/30';
                             badgeClass = 'bg-white/20 text-white px-2 py-0.5 rounded-lg';
                             badgeStyle = { color: '#FFFFFF' };
                           } else {
-                            pillClass = topOnDark
-                              ? 'bg-white/5 border-white/10 text-white/35 opacity-45'
-                              : 'bg-zinc-100/80 border-zinc-200/70 text-zinc-400 opacity-50';
+                            pillClass = quadOnDark
+                              ? 'text-white/35 opacity-40'
+                              : 'text-zinc-400 opacity-45';
                             badgeStyle = {
-                              color: topOnDark ? 'rgba(255,255,255,0.4)' : '#94A3B8',
+                              color: quadOnDark ? 'rgba(255,255,255,0.4)' : '#94A3B8',
                             };
                           }
                         }
@@ -1205,7 +1907,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                         return (
                           <div
                             key={oi}
-                            className={`rounded-xl border-2 font-bold flex items-center gap-2.5 min-h-0 overflow-hidden transition-all ${optTextClass} ${pillClass}`}
+                            className={`rounded-xl font-bold flex items-center gap-2.5 min-h-0 overflow-hidden transition-all ${optTextClass} ${pillClass}`}
                           >
                             <button
                               type="button"
@@ -1228,7 +1930,9 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                                 }
                               }}
                               className={`shrink-0 font-extrabold ${badgeClass} ${
-                                editable && !isThumbnail ? 'cursor-pointer hover:underline' : 'cursor-default'
+                                editable && !isThumbnail
+                                  ? 'cursor-pointer hover:underline'
+                                  : 'cursor-default'
                               }`}
                               style={badgeStyle}
                             >
@@ -1273,10 +1977,10 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                   ) : (
                     /* Open-question fallback reveal strip */
                     <div
-                      className={`h-[68px] rounded-2xl px-6 mt-2 flex items-center transition-all shrink-0 ${
+                      className={`h-[64px] rounded-xl px-5 mt-2 flex items-center transition-all shrink-0 ${
                         revealed
-                          ? 'bg-emerald-600 text-white border-2 border-emerald-700 shadow-md'
-                          : 'border-2 border-dashed border-zinc-300/70 bg-zinc-50/40'
+                          ? 'bg-emerald-600 text-white shadow-md'
+                          : 'border-b-2 border-dashed border-zinc-400/50'
                       }`}
                     >
                       {revealed ? (
@@ -1300,6 +2004,15 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                   )}
                 </div>
               );
+
+              return placeSlot(slotId, quadNode, {
+                preserveGridCell: true,
+                showBoxToggle: true,
+                showLayerToggle: true,
+                isBoxed: quadBoxed,
+                isBottomLayer: quadOnDark,
+                className: quadOverride ? '' : 'h-full min-h-0',
+              });
             })}
           </div>
         </div>
@@ -1307,6 +2020,16 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     }
 
     if (slide.presetId === 'title-divider') {
+      const titleOverride = slide.elementLayouts?.['slot-title'];
+      const titleOnDark = titleOverride?.layer
+        ? titleOverride.layer === 'bottom'
+        : topOnDark;
+      const titleBoxed = Boolean(titleOverride?.boxed);
+
+      const bigQOverride = slide.elementLayouts?.['slot-big-question'];
+      const bigQOnDark = bigQOverride?.layer ? bigQOverride.layer === 'bottom' : topOnDark;
+      const bigQBoxed = Boolean(bigQOverride?.boxed);
+
       return (
         <div
           className={`relative z-20 flex-1 flex flex-col justify-between pb-16 pt-10 ${
@@ -1314,89 +2037,159 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           }`}
         >
           <div className="max-w-[980px] space-y-8">
-            <h1
-              className="text-[74px] font-extrabold leading-[1.06] tracking-tight"
-              style={{ color: topOnDark ? '#FFFFFF' : neutralDark }}
-            >
-              <InlineEditableText
-                value={slide.title}
-                editable={editable && !isThumbnail}
-                onCommit={(next) => onUpdateSlide?.({ title: next })}
-              />
-            </h1>
-
-            {(slide.bigQuestion || (editable && !isThumbnail)) && (
+            {placeSlot(
+              'slot-title',
               <div
-                className={`p-8 rounded-3xl border-l-[12px] shadow-md ${
-                  topOnDark
-                    ? 'bg-white/14 backdrop-blur-md border-y border-r border-white/25'
-                    : 'bg-white/92'
-                }`}
-                style={{ borderLeftColor: topOnDark ? '#FFFFFF' : neutralAccent }}
+                className={
+                  titleBoxed
+                    ? `rounded-3xl p-6 border-2 shadow-lg ${
+                        titleOnDark
+                          ? 'bg-white/14 backdrop-blur-md border-white/30'
+                          : 'bg-white/95'
+                      }`
+                    : hideWaveBackground
+                    ? 'rounded-2xl p-4 border-2 border-dashed border-slate-300 bg-white/55'
+                    : ''
+                }
+                style={
+                  titleBoxed && !titleOnDark ? { borderColor: neutralBorder } : undefined
+                }
               >
-                <p
-                  className="text-[42px] font-bold leading-snug"
-                  style={{ color: topOnDark ? '#FFFFFF' : neutralDark }}
+                <h1
+                  className="text-[74px] font-extrabold leading-[1.06] tracking-tight"
+                  style={{ color: titleOnDark ? '#FFFFFF' : neutralDark }}
                 >
                   <InlineEditableText
-                    value={slide.bigQuestion || ''}
-                    placeholder="Add big question..."
+                    value={slide.title}
                     editable={editable && !isThumbnail}
-                    multiline
-                    onCommit={(next) => onUpdateSlide?.({ bigQuestion: next })}
+                    onCommit={(next) => onUpdateSlide?.({ title: next })}
                   />
-                </p>
-              </div>
+                </h1>
+              </div>,
+              {
+                showBoxToggle: true,
+                showLayerToggle: true,
+                isBoxed: titleBoxed,
+                isBottomLayer: titleOnDark,
+              }
             )}
+
+            {(slide.bigQuestion || (editable && !isThumbnail)) &&
+              placeSlot(
+                'slot-big-question',
+                <div
+                  className={
+                    bigQBoxed
+                      ? `p-8 rounded-3xl border-l-[12px] shadow-md ${
+                          bigQOnDark
+                            ? 'bg-white/14 backdrop-blur-md border-y border-r border-white/25'
+                            : 'bg-white/92'
+                        }`
+                      : hideWaveBackground
+                      ? 'p-6 rounded-2xl border-2 border-dashed border-slate-300 border-l-[10px] bg-white/65'
+                      : 'border-l-[10px] pl-7 py-1'
+                  }
+                  style={{ borderLeftColor: bigQOnDark ? '#FFFFFF' : neutralAccent }}
+                >
+                  <p
+                    className="text-[42px] font-bold leading-snug"
+                    style={{ color: bigQOnDark ? '#FFFFFF' : neutralDark }}
+                  >
+                    <InlineEditableText
+                      value={slide.bigQuestion || ''}
+                      placeholder="Add big question..."
+                      editable={editable && !isThumbnail}
+                      multiline
+                      onCommit={(next) => onUpdateSlide?.({ bigQuestion: next })}
+                    />
+                  </p>
+                </div>,
+                {
+                  showBoxToggle: true,
+                  showLayerToggle: true,
+                  isBoxed: bigQBoxed,
+                  isBottomLayer: bigQOnDark,
+                }
+              )}
           </div>
 
           {slide.keyTermsStrip && slide.keyTermsStrip.length > 0 && (
-            <div className="grid grid-cols-3 gap-6 max-w-[1520px]">
-              {slide.keyTermsStrip.map((kt, i) => (
-                <div
-                  key={i}
-                  className={`rounded-3xl border-2 p-6 shadow-md ${
-                    topOnDark ? 'bg-white/15 border-white/30' : 'bg-white/95'
-                  }`}
-                  style={topOnDark ? undefined : { borderColor: neutralBorder }}
-                >
+            <div className="grid grid-cols-3 gap-8 max-w-[1520px]">
+              {slide.keyTermsStrip.map((kt, i) => {
+                const slotId = `slot-term-${i}`;
+                const termOverride = slide.elementLayouts?.[slotId];
+                const termOnDark = termOverride?.layer
+                  ? termOverride.layer === 'bottom'
+                  : topOnDark;
+                const termBoxed = Boolean(termOverride?.boxed);
+
+                return placeSlot(
+                  slotId,
                   <div
-                    className="text-[31px] font-extrabold mb-1.5"
-                    style={{ color: topOnDark ? '#FFFFFF' : neutralAccent }}
+                    className={
+                      termBoxed
+                        ? `rounded-3xl border-2 p-6 shadow-md ${
+                            termOnDark ? 'bg-white/15 border-white/30' : 'bg-white/95'
+                          }`
+                        : hideWaveBackground
+                        ? 'rounded-2xl border-2 border-dashed border-slate-300 p-5 bg-white/60'
+                        : 'border-t-4 pt-4'
+                    }
+                    style={
+                      termBoxed
+                        ? termOnDark
+                          ? undefined
+                          : { borderColor: neutralBorder }
+                        : !hideWaveBackground
+                        ? { borderTopColor: termOnDark ? '#FFFFFF' : neutralAccent }
+                        : undefined
+                    }
                   >
-                    <InlineEditableText
-                      value={kt.term}
-                      editable={editable && !isThumbnail}
-                      onCommit={(next) =>
-                        onUpdateSlide?.({
-                          keyTermsStrip: slide.keyTermsStrip?.map((item, idx) =>
-                            idx === i ? { ...item, term: next } : item
-                          ),
-                        })
-                      }
-                    />
-                  </div>
-                  <div
-                    className="text-[26px] leading-snug"
-                    style={{
-                      color: topOnDark ? 'rgba(255,255,255,0.88)' : p.mutedInk,
-                    }}
-                  >
-                    <InlineEditableText
-                      value={kt.definition}
-                      editable={editable && !isThumbnail}
-                      multiline
-                      onCommit={(next) =>
-                        onUpdateSlide?.({
-                          keyTermsStrip: slide.keyTermsStrip?.map((item, idx) =>
-                            idx === i ? { ...item, definition: next } : item
-                          ),
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-              ))}
+                    <div
+                      className="text-[31px] font-extrabold mb-1.5"
+                      style={{ color: termOnDark ? '#FFFFFF' : neutralAccent }}
+                    >
+                      <InlineEditableText
+                        value={kt.term}
+                        editable={editable && !isThumbnail}
+                        onCommit={(next) =>
+                          onUpdateSlide?.({
+                            keyTermsStrip: slide.keyTermsStrip?.map((item, idx) =>
+                              idx === i ? { ...item, term: next } : item
+                            ),
+                          })
+                        }
+                      />
+                    </div>
+                    <div
+                      className="text-[26px] leading-snug"
+                      style={{
+                        color: termOnDark ? 'rgba(255,255,255,0.88)' : p.mutedInk,
+                      }}
+                    >
+                      <InlineEditableText
+                        value={kt.definition}
+                        editable={editable && !isThumbnail}
+                        multiline
+                        onCommit={(next) =>
+                          onUpdateSlide?.({
+                            keyTermsStrip: slide.keyTermsStrip?.map((item, idx) =>
+                              idx === i ? { ...item, definition: next } : item
+                            ),
+                          })
+                        }
+                      />
+                    </div>
+                  </div>,
+                  {
+                    preserveGridCell: true,
+                    showBoxToggle: true,
+                    showLayerToggle: true,
+                    isBoxed: termBoxed,
+                    isBottomLayer: termOnDark,
+                  }
+                );
+              })}
             </div>
           )}
         </div>
@@ -1418,72 +2211,101 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
 
       if (slide.presetId === 'vocab-single-term-focus') {
         const focus = terms[0] || { term: slide.title, definition: '' };
-        const noteBlocks = slide.keyTermsStrip?.length ? slide.bodyBlocks : slide.bodyBlocks.slice(1);
+        const noteBlocks = slide.keyTermsStrip?.length
+          ? slide.bodyBlocks
+          : slide.bodyBlocks.slice(1);
+        const focusOverride = slide.elementLayouts?.['slot-vocab-focus'];
+        const focusOnDark = focusOverride?.layer
+          ? focusOverride.layer === 'bottom'
+          : topOnDark;
+        const focusBoxed = Boolean(focusOverride?.boxed);
+
         return (
           <div className={`relative z-20 flex-1 flex gap-10 min-h-0 ${contentPad}`}>
             <div className="w-[820px] shrink-0 flex flex-col justify-center gap-6">
-              <div
-                className={`rounded-3xl p-10 border-l-[12px] shadow-lg space-y-5 ${
-                  topOnDark
-                    ? 'bg-white/14 backdrop-blur-md border-y-2 border-r-2 border-white/30'
-                    : 'bg-white/95 border-y-2 border-r-2'
-                }`}
-                style={{
-                  borderColor: topOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
-                  borderLeftColor: topOnDark ? '#FFFFFF' : neutralAccent,
-                }}
-              >
-                <div className="flex items-center gap-4">
-                  <DualCodeBadgeControl
-                    iconId={slide.bodyBlocks[0]?.dualCodeIcon || 'concept'}
-                    accentColor={neutralAccent}
-                    onDarkSurface={topOnDark}
-                    editable={false}
-                  />
-                  <h2
-                    className="text-[54px] font-extrabold leading-tight tracking-tight"
-                    style={{ color: topOnDark ? '#FFFFFF' : neutralDark }}
+              {placeSlot(
+                'slot-vocab-focus',
+                <div
+                  className={
+                    focusBoxed
+                      ? `rounded-3xl p-10 border-l-[12px] shadow-lg space-y-5 ${
+                          focusOnDark
+                            ? 'bg-white/14 backdrop-blur-md border-y-2 border-r-2 border-white/30'
+                            : 'bg-white/95 border-y-2 border-r-2'
+                        }`
+                      : hideWaveBackground
+                      ? 'rounded-2xl p-8 border-2 border-dashed border-slate-300 bg-white/65 space-y-4'
+                      : 'border-l-[10px] pl-7 py-2 space-y-4'
+                  }
+                  style={
+                    focusBoxed
+                      ? {
+                          borderColor: focusOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                          borderLeftColor: focusOnDark ? '#FFFFFF' : neutralAccent,
+                        }
+                      : !hideWaveBackground
+                      ? { borderLeftColor: focusOnDark ? '#FFFFFF' : neutralAccent }
+                      : undefined
+                  }
+                >
+                  <div className="flex items-center gap-4">
+                    <DualCodeBadgeControl
+                      iconId={slide.bodyBlocks[0]?.dualCodeIcon || 'concept'}
+                      accentColor={neutralAccent}
+                      onDarkSurface={focusOnDark}
+                      editable={false}
+                    />
+                    <h2
+                      className="text-[54px] font-extrabold leading-tight tracking-tight"
+                      style={{ color: focusOnDark ? '#FFFFFF' : neutralDark }}
+                    >
+                      <InlineEditableText
+                        value={focus.term}
+                        editable={editable && !isThumbnail}
+                        onCommit={(next) => {
+                          if (slide.keyTermsStrip?.length) {
+                            onUpdateSlide?.({
+                              keyTermsStrip: slide.keyTermsStrip.map((t, idx) =>
+                                idx === 0 ? { ...t, term: next } : t
+                              ),
+                            });
+                          } else if (slide.bodyBlocks[0]) {
+                            updateBlock(slide.bodyBlocks[0].id, { heading: next });
+                          }
+                        }}
+                      />
+                    </h2>
+                  </div>
+                  <p
+                    className="text-[36px] leading-[1.38] font-medium"
+                    style={{ color: focusOnDark ? '#FFFFFF' : neutralDark }}
                   >
                     <InlineEditableText
-                      value={focus.term}
+                      value={focus.definition}
+                      placeholder="Add clear definition for pupils to write..."
                       editable={editable && !isThumbnail}
+                      multiline
                       onCommit={(next) => {
                         if (slide.keyTermsStrip?.length) {
                           onUpdateSlide?.({
                             keyTermsStrip: slide.keyTermsStrip.map((t, idx) =>
-                              idx === 0 ? { ...t, term: next } : t
+                              idx === 0 ? { ...t, definition: next } : t
                             ),
                           });
                         } else if (slide.bodyBlocks[0]) {
-                          updateBlock(slide.bodyBlocks[0].id, { heading: next });
+                          updateBlock(slide.bodyBlocks[0].id, { content: next });
                         }
                       }}
                     />
-                  </h2>
-                </div>
-                <p
-                  className="text-[36px] leading-[1.38] font-medium"
-                  style={{ color: topOnDark ? '#FFFFFF' : neutralDark }}
-                >
-                  <InlineEditableText
-                    value={focus.definition}
-                    placeholder="Add clear definition for pupils to write..."
-                    editable={editable && !isThumbnail}
-                    multiline
-                    onCommit={(next) => {
-                      if (slide.keyTermsStrip?.length) {
-                        onUpdateSlide?.({
-                          keyTermsStrip: slide.keyTermsStrip.map((t, idx) =>
-                            idx === 0 ? { ...t, definition: next } : t
-                          ),
-                        });
-                      } else if (slide.bodyBlocks[0]) {
-                        updateBlock(slide.bodyBlocks[0].id, { content: next });
-                      }
-                    }}
-                  />
-                </p>
-              </div>
+                  </p>
+                </div>,
+                {
+                  showBoxToggle: true,
+                  showLayerToggle: true,
+                  isBoxed: focusBoxed,
+                  isBottomLayer: focusOnDark,
+                }
+              )}
               {noteBlocks.map((b, i) => renderCard(b, i))}
             </div>
 
@@ -1506,24 +2328,39 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         <div className={`relative z-20 flex-1 flex gap-10 min-h-0 ${contentPad}`}>
           <div className="w-[860px] shrink-0 flex flex-col justify-center gap-4 min-h-0">
             {terms.slice(0, 6).map((kt, i) => {
+              const slotId = `slot-vocab-${i}`;
+              const rowOverride = slide.elementLayouts?.[slotId];
+              const rowOnDark = rowOverride?.layer ? rowOverride.layer === 'bottom' : topOnDark;
+              const rowBoxed = Boolean(rowOverride?.boxed);
               const blockIcon = slide.bodyBlocks[i]?.dualCodeIcon || 'concept';
               const compactRow = terms.length >= 5;
-              return (
+
+              return placeSlot(
+                slotId,
                 <div
-                  key={i}
-                  className={`rounded-2xl border-2 px-6 ${
-                    compactRow ? 'py-3.5' : 'py-4.5'
-                  } shadow-sm flex items-start gap-4 ${
-                    topOnDark
-                      ? 'bg-white/14 backdrop-blur-md border-white/30'
-                      : 'bg-white/95'
+                  className={`flex items-start gap-4 ${
+                    rowBoxed
+                      ? `rounded-2xl border-2 px-6 ${
+                          compactRow ? 'py-3.5' : 'py-4.5'
+                        } shadow-sm ${
+                          rowOnDark
+                            ? 'bg-white/14 backdrop-blur-md border-white/30'
+                            : 'bg-white/95'
+                        }`
+                      : hideWaveBackground
+                      ? `rounded-2xl border-2 border-dashed border-slate-300 px-5 ${
+                          compactRow ? 'py-3' : 'py-4'
+                        } bg-white/60`
+                      : `px-2 ${compactRow ? 'py-2' : 'py-2.5'}`
                   }`}
-                  style={topOnDark ? undefined : { borderColor: neutralBorder }}
+                  style={
+                    rowBoxed && !rowOnDark ? { borderColor: neutralBorder } : undefined
+                  }
                 >
                   <DualCodeBadgeControl
                     iconId={blockIcon}
                     accentColor={neutralAccent}
-                    onDarkSurface={topOnDark}
+                    onDarkSurface={rowOnDark}
                     editable={false}
                   />
                   <div className="flex-1 min-w-0">
@@ -1531,7 +2368,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                       className={`${
                         compactRow ? 'text-[31px]' : 'text-[35px]'
                       } font-extrabold leading-tight`}
-                      style={{ color: topOnDark ? '#FFFFFF' : neutralAccent }}
+                      style={{ color: rowOnDark ? '#FFFFFF' : neutralAccent }}
                     >
                       <InlineEditableText
                         value={kt.term}
@@ -1553,9 +2390,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                       <div
                         className={`mt-2.5 border-b-2 border-dashed ${
                           compactRow ? 'h-7' : 'h-10'
-                        } ${
-                          topOnDark ? 'border-white/40' : 'border-zinc-300'
-                        }`}
+                        } ${rowOnDark ? 'border-white/40' : 'border-zinc-400/70'}`}
                       />
                     ) : (
                       <div
@@ -1563,7 +2398,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                           compactRow ? 'text-[24px]' : 'text-[27px]'
                         } leading-snug font-medium`}
                         style={{
-                          color: topOnDark ? 'rgba(255,255,255,0.92)' : neutralDark,
+                          color: rowOnDark ? 'rgba(255,255,255,0.92)' : neutralDark,
                         }}
                       >
                         <InlineEditableText
@@ -1585,7 +2420,13 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                       </div>
                     )}
                   </div>
-                </div>
+                </div>,
+                {
+                  showBoxToggle: true,
+                  showLayerToggle: true,
+                  isBoxed: rowBoxed,
+                  isBottomLayer: rowOnDark,
+                }
               );
             })}
           </div>
@@ -1709,9 +2550,220 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     );
   };
 
+  const renderCustomElementsOverlay = () => {
+    const els = slide.customCanvasElements;
+    if (!els || els.length === 0) return null;
+
+    return els.map((el) => {
+      if (hiddenSet.has(el.id)) return null;
+
+      const override = slide.elementLayouts?.[el.id];
+      const boxOverride: ElementBoxOverride = override || {
+        x: Math.round((el.x / 100) * 1920),
+        y: Math.round((el.y / 100) * 1080),
+        w: Math.max(180, Math.round((el.w / 100) * 1920)),
+        h: Math.max(64, Math.round((el.h / 100) * 1080)),
+        layer: el.layer || 'top',
+        boxed: el.boxed,
+      };
+
+      const effectiveLayer = boxOverride.layer ?? el.layer ?? 'top';
+      const onDark = effectiveLayer === 'bottom' ? bottomOnDark : topOnDark;
+      const isMedia = el.kind === 'image' || el.kind === 'diagram' || Boolean(el.svgCode);
+      const isBoxed =
+        override?.boxed !== undefined
+          ? override.boxed
+          : el.boxed !== undefined
+          ? el.boxed
+          : false;
+      const isSelectedEl = canEditComponents && activeSelectedId === el.id;
+
+      const updateCustomEl = (patch: Partial<BespokeCanvasElement>) => {
+        onUpdateSlide?.({
+          customCanvasElements: slide.customCanvasElements?.map((c) =>
+            c.id === el.id ? { ...c, ...patch } : c
+          ),
+        });
+      };
+
+      let node: React.ReactNode;
+      if (el.kind === 'image') {
+        node = el.imageUrl ? (
+          <div className="w-full h-full rounded-3xl overflow-hidden shadow-2xl border-4 border-white/90 bg-white">
+            <img
+              src={el.imageUrl}
+              alt={el.heading || 'Slide visual'}
+              className={`w-full h-full ${
+                el.cropFit === 'contain' ? 'object-contain bg-white' : 'object-cover'
+              }`}
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            disabled={!editable || isThumbnail}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (editable && !isThumbnail) onOpenMediaPicker?.(el.id);
+            }}
+            className={`w-full h-full rounded-3xl border-4 border-dashed flex flex-col items-center justify-center p-6 text-center transition ${
+              onDark
+                ? 'border-white/65 bg-white/15 hover:bg-white/25 text-white'
+                : 'border-slate-400/75 bg-white/75 hover:bg-white text-slate-700'
+            }`}
+          >
+            <ImagePlus size={44} className="mb-3 opacity-85" />
+            <span className="text-[28px] font-extrabold leading-tight">
+              {el.heading || 'Choose Image or Diagram'}
+            </span>
+            <span className="mt-1.5 text-[21px] font-medium opacity-80">
+              Click to search Pexels, Wikimedia, or SVG diagrams
+            </span>
+          </button>
+        );
+      } else if (el.svgCode) {
+        node = (
+          <div
+            className={`w-full h-full flex items-center justify-center p-4 ${
+              hideWaveBackground
+                ? 'rounded-2xl border-2 border-dashed border-sky-400 bg-sky-50/70'
+                : isBoxed
+                ? 'rounded-3xl bg-white/95 border-2 shadow-lg'
+                : 'rounded-3xl bg-white/92 shadow-md'
+            }`}
+            style={isBoxed ? { borderColor: neutralBorder } : undefined}
+            dangerouslySetInnerHTML={{ __html: el.svgCode }}
+          />
+        );
+      } else {
+        const cleanHeading =
+          el.heading && !isGenericMetaHeading(el.heading) ? el.heading : '';
+        node = (
+          <div
+            className={`w-full h-full overflow-hidden flex flex-col gap-2 ${
+              isBoxed
+                ? `rounded-3xl p-6 border-2 shadow-lg ${
+                    onDark
+                      ? 'bg-white/14 backdrop-blur-md border-white/30'
+                      : 'bg-white/95'
+                  }`
+                : hideWaveBackground
+                ? 'rounded-2xl p-5 border-2 border-dashed border-slate-300 bg-white/65'
+                : 'px-3 py-2'
+            }`}
+            style={
+              isBoxed
+                ? { borderColor: onDark ? 'rgba(255,255,255,0.28)' : neutralBorder }
+                : undefined
+            }
+          >
+            {(cleanHeading || isSelectedEl) && (
+              <div className="flex items-center gap-3 min-w-0">
+                {(el.dualCodeIcon || isSelectedEl) && (
+                  <DualCodeBadgeControl
+                    iconId={el.dualCodeIcon}
+                    accentColor={neutralAccent}
+                    onDarkSurface={onDark}
+                    editable={editable && !isThumbnail}
+                    onChangeIcon={(nextIcon) =>
+                      updateCustomEl({ dualCodeIcon: nextIcon })
+                    }
+                  />
+                )}
+                {cleanHeading ? (
+                  <h4
+                    className="text-[35px] font-extrabold leading-tight flex-1"
+                    style={{ color: onDark ? '#FFFFFF' : neutralAccent }}
+                  >
+                    <InlineEditableText
+                      value={cleanHeading}
+                      editable={editable && !isThumbnail}
+                      onCommit={(next) => updateCustomEl({ heading: next })}
+                    />
+                  </h4>
+                ) : (
+                  <h4
+                    className="text-[28px] font-bold leading-tight opacity-60 flex-1"
+                    style={{ color: onDark ? '#FFFFFF' : neutralAccent }}
+                  >
+                    <InlineEditableText
+                      value=""
+                      placeholder="+ Add heading"
+                      editable={editable && !isThumbnail}
+                      onCommit={(next) => updateCustomEl({ heading: next })}
+                    />
+                  </h4>
+                )}
+              </div>
+            )}
+            <div className="min-h-0 flex-1">
+              {renderBulletOrProse(
+                el.content || '',
+                onDark ? '#FFFFFF' : neutralDark,
+                'text-[31px]',
+                onDark,
+                (next) => updateCustomEl({ content: next })
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <InteractiveSlot
+          key={el.id}
+          id={el.id}
+          override={boxOverride}
+          editable={canEditComponents}
+          isSelected={isSelectedEl}
+          isBoxed={isBoxed}
+          isBottomLayer={effectiveLayer === 'bottom'}
+          showBoxToggle={!isMedia || el.kind === 'diagram'}
+          showLayerToggle={!isMedia}
+          stretchHeight
+          onSelect={() => setSelectedId(el.id)}
+          onStartDrag={(e, slotEl, mode, minDelta) =>
+            handleStartSlotDrag(el.id, e, slotEl, mode, minDelta, boxOverride)
+          }
+          onToggleBoxed={() => {
+            const nextBoxed = !isBoxed;
+            updateCustomEl({ boxed: nextBoxed });
+            if (override) updateSlotLayout(el.id, { boxed: nextBoxed });
+          }}
+          onToggleLayer={() => {
+            const nextLayer = effectiveLayer === 'bottom' ? 'top' : 'bottom';
+            updateCustomEl({ layer: nextLayer });
+            if (override) updateSlotLayout(el.id, { layer: nextLayer });
+          }}
+          onDelete={() => deleteSlot(el.id)}
+          extraActions={
+            isMedia && editable && onOpenMediaPicker && !isThumbnail ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenMediaPicker(el.id);
+                }}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[17px] font-bold"
+              >
+                <ImagePlus size={16} />
+                <span>Change Visual</span>
+              </button>
+            ) : undefined
+          }
+        >
+          {node}
+        </InteractiveSlot>
+      );
+    });
+  };
+
   return (
     <div
       ref={containerRef}
+      onClick={() => {
+        if (canEditComponents) setSelectedId(null);
+      }}
       className="relative w-full aspect-video overflow-hidden select-none shadow-md"
       style={{
         backgroundColor: hideWaveBackground ? '#F4F4F5' : palette.layers[3],
@@ -1719,6 +2771,13 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     >
       {/* Scaled 1920x1080 Fixed Coordinate Slide Canvas */}
       <div
+        ref={canvasBoxRef}
+        onClickCapture={(e) => {
+          if (Date.now() - lastDraggedAtRef.current < 180) {
+            e.stopPropagation();
+            e.preventDefault();
+          }
+        }}
         className="origin-top-left relative flex flex-col"
         style={{
           width: 1920,
@@ -1754,6 +2813,12 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         {slide.presetId !== 'title-divider' && !isTitlePage && renderHeader()}
 
         {renderPresetContent(palette)}
+
+        {/* Freeform Moved Components & Custom Elements Layer */}
+        <div className="absolute inset-0 z-30 pointer-events-none">
+          {movedOverlays}
+          {renderCustomElementsOverlay()}
+        </div>
 
         {/* Interactive Wave Path & Draggable Control Points Overlay */}
         {showWavePathEditor &&

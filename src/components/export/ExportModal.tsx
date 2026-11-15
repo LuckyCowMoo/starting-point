@@ -44,7 +44,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       await downloadLessonPptx(lesson, setStatusMsg);
       setStatusMsg('PowerPoint (.pptx) downloaded!');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'PPTX export failed.');
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string' && err
+          ? err
+          : 'PPTX export failed (check slide images/diagrams and try again).';
+      setError(msg);
     } finally {
       setBusy(null);
     }

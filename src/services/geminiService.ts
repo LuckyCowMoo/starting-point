@@ -434,6 +434,7 @@ export function parseStage4SlidesResponse(
 
     const cleanedBlocks = (s.bodyBlocks || []).map((b) => ({
       ...b,
+      style: b.style === 'card' ? 'plain' : b.style || 'plain',
       heading:
         b.heading && !GENERIC_HEADINGS_REGEX.test(b.heading.trim())
           ? b.heading

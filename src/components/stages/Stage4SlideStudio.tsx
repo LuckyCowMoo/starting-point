@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
   Download,
@@ -20,16 +20,19 @@ import {
   Terminal,
   Timer,
   Trash2,
+  Type,
   Wand2,
 } from 'lucide-react';
 import {
   AppSettings,
+  BespokeCanvasElement,
   LessonPhase,
   LessonSequence,
   PlannedLesson,
   RoutineIconType,
   SlideData,
   SlidePresetId,
+  SlideTextBlock,
   WaveVariant,
 } from '../../types/curriculum';
 import {
@@ -78,6 +81,8 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
     sequence.lessons.find((l) => l.id === activeLessonId) || sequence.lessons[0];
 
   const [selectedSlideIdx, setSelectedSlideIdx] = useState(0);
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [mediaTargetElementId, setMediaTargetElementId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<'edit' | 'ai'>('edit');
   const [previewAllAnswers, setPreviewAllAnswers] = useState(true);
   const [mediaOpen, setMediaOpen] = useState(false);
@@ -92,6 +97,15 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
   const [bespokePrompt, setBespokePrompt] = useState('');
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const activeSlideIdForReset =
+    lesson && lesson.slidesData.length > 0
+      ? lesson.slidesData[Math.min(selectedSlideIdx, lesson.slidesData.length - 1)]?.id
+      : undefined;
+
+  useEffect(() => {
+    setSelectedElementId(null);
+  }, [activeSlideIdForReset]);
 
   if (!lesson || lesson.slidesData.length === 0) {
     return (
@@ -445,9 +459,87 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
         <div className="flex-1 min-w-0 overflow-y-auto bg-zinc-200/60 p-5 flex flex-col items-center justify-start gap-3">
           {/* Quick Inline Canvas Toolbar */}
           <div className="w-full max-w-5xl flex flex-wrap items-center justify-between gap-2 px-1">
-            <span className="text-[11px] font-medium text-zinc-600">
-              Click any slide text or visual slot on the canvas to edit directly
-            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  const existingCount = slide.customCanvasElements?.length || 0;
+                  const newId = `ce-txt-${Date.now()}`;
+                  const newEl: BespokeCanvasElement = {
+                    id: newId,
+                    kind: 'text',
+                    x: 8 + (existingCount * 4) % 24,
+                    y: 26 + (existingCount * 5) % 26,
+                    w: 38,
+                    h: 18,
+                    heading: '',
+                    content: '• Click to edit text on slide',
+                    layer: 'top',
+                    boxed: false,
+                  };
+                  updateActiveSlide({
+                    customCanvasElements: [...(slide.customCanvasElements || []), newEl],
+                  });
+                  setSelectedElementId(newId);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-white border border-zinc-300 text-zinc-800 hover:bg-emerald-50 hover:border-emerald-400 text-[11px] font-bold flex items-center gap-1.5 transition shadow-2xs"
+                title="Add a freeform draggable text box onto the slide"
+              >
+                <Type size={12} className="text-emerald-700" />
+                <span>+ Add Text</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const existingCount = slide.customCanvasElements?.length || 0;
+                  const newId = `ce-img-${Date.now()}`;
+                  const newEl: BespokeCanvasElement = {
+                    id: newId,
+                    kind: 'image',
+                    x: 50 + (existingCount * 3) % 12,
+                    y: 22 + (existingCount * 4) % 16,
+                    w: 40,
+                    h: 48,
+                    heading: 'Slide Visual / Diagram',
+                    content: '',
+                    layer: 'bottom',
+                    boxed: false,
+                  };
+                  updateActiveSlide({
+                    customCanvasElements: [...(slide.customCanvasElements || []), newEl],
+                  });
+                  setSelectedElementId(newId);
+                  setMediaTargetElementId(newId);
+                  setMediaOpen(true);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-white border border-zinc-300 text-zinc-800 hover:bg-sky-50 hover:border-sky-400 text-[11px] font-bold flex items-center gap-1.5 transition shadow-2xs"
+                title="Add an image or SVG diagram onto the slide"
+              >
+                <ImageIcon size={12} className="text-sky-700" />
+                <span>+ Add Image / Diagram</span>
+              </button>
+              {(Object.keys(slide.elementLayouts || {}).length > 0 ||
+                (slide.hiddenElementIds?.length || 0) > 0) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateActiveSlide({
+                      elementLayouts: undefined,
+                      hiddenElementIds: undefined,
+                    });
+                    setSelectedElementId(null);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-50 text-[11px] font-bold flex items-center gap-1 transition shadow-2xs"
+                  title="Restore preset default element positions and hidden items"
+                >
+                  <RotateCcw size={12} />
+                  <span>Reset Positions</span>
+                </button>
+              )}
+              <span className="text-[11px] font-medium text-zinc-500 ml-1 hidden xl:inline">
+                Click any element to drag, resize, edit, or delete
+              </span>
+            </div>
             <div className="flex items-center gap-2">
               {slide.waveControlPoints && slide.waveControlPoints.length > 0 && (
                 <button
@@ -518,7 +610,10 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setMediaOpen(true)}
+                  onClick={() => {
+                    setMediaTargetElementId(null);
+                    setMediaOpen(true);
+                  }}
                   className="px-2.5 py-1.5 rounded-lg bg-white border border-amber-300 font-bold text-amber-900 hover:bg-amber-100 transition"
                 >
                   Pick Image / SVG
@@ -548,8 +643,13 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
               interactiveTimer={true}
               editable={true}
               showWavePathEditor={showWavePathEditor}
+              selectedElementId={selectedElementId}
+              onSelectElement={setSelectedElementId}
               onUpdateSlide={updateActiveSlide}
-              onOpenMediaPicker={() => setMediaOpen(true)}
+              onOpenMediaPicker={(targetElId) => {
+                setMediaTargetElementId(targetElId || null);
+                setMediaOpen(true);
+              }}
             />
           </div>
 
@@ -796,7 +896,10 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                   </label>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setMediaOpen(true)}
+                      onClick={() => {
+                        setMediaTargetElementId(null);
+                        setMediaOpen(true);
+                      }}
                       className="flex-1 py-2 px-3 rounded-xl bg-[#FAF6F0] border border-zinc-300 hover:border-emerald-500 font-bold text-zinc-800 flex items-center justify-center gap-1.5"
                     >
                       <ImageIcon size={14} />
@@ -1048,9 +1151,9 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                               ...slide.bodyBlocks,
                               {
                                 id: `blk-${Date.now()}`,
-                                heading: 'New Point',
+                                heading: '',
                                 content: '• Crisp pupil-facing point...',
-                                style: 'card',
+                                style: 'plain',
                                 layer: 'top',
                               },
                             ],
@@ -1082,26 +1185,27 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                             className="flex-1 font-bold bg-white px-2 py-1 rounded-lg border border-zinc-200"
                           />
                           <select
-                            value={b.style || (slide.phase === 'explanation' ? 'plain' : 'card')}
+                            value={b.style === 'card' ? 'plain' : b.style || 'plain'}
                             onChange={(e) =>
                               updateActiveSlide({
                                 bodyBlocks: slide.bodyBlocks.map((item, i) =>
                                   i === idx
                                     ? {
                                         ...item,
-                                        style: e.target.value as 'plain' | 'card' | 'highlight' | 'step',
+                                        style: e.target.value as NonNullable<SlideTextBlock['style']>,
                                       }
                                     : item
                                 ),
                               })
                             }
-                            title="Block box style"
+                            title="Block display style"
                             className="px-1.5 py-1 rounded-lg text-[10px] font-bold border border-zinc-300 bg-white text-zinc-700"
                           >
                             <option value="plain">Plain Text</option>
-                            <option value="card">Boxed Card</option>
-                            <option value="highlight">Highlight Box</option>
-                            <option value="step">Step Card</option>
+                            <option value="boxed">Boxed Card</option>
+                            <option value="highlight">Accent Left Bar</option>
+                            <option value="step">Numbered Step</option>
+                            <option value="code">Code Block</option>
                           </select>
                           <button
                             onClick={() =>
@@ -1248,23 +1352,69 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
 
       <MediaPickerModal
         isOpen={mediaOpen}
-        currentMedia={slide.mediaItem}
+        currentMedia={
+          mediaTargetElementId
+            ? (() => {
+                const targetEl = slide.customCanvasElements?.find(
+                  (el) => el.id === mediaTargetElementId
+                );
+                if (!targetEl) return undefined;
+                return {
+                  id: targetEl.id,
+                  type: targetEl.svgCode ? 'svg-diagram' : 'image',
+                  title: targetEl.heading || 'Visual',
+                  url: targetEl.imageUrl,
+                  svgCode: targetEl.svgCode,
+                  cropFit: targetEl.cropFit || (targetEl.svgCode ? 'contain' : 'cover'),
+                  frameShape: 'clean',
+                };
+              })()
+            : slide.mediaItem
+        }
         pexelsApiKey={settings.pexelsApiKey}
         pixabayApiKey={settings.pixabayApiKey}
-        onClose={() => setMediaOpen(false)}
-        onSelectMedia={(media) =>
+        onClose={() => {
+          setMediaOpen(false);
+          setMediaTargetElementId(null);
+        }}
+        onSelectMedia={(media) => {
+          if (
+            mediaTargetElementId &&
+            slide.customCanvasElements?.some((el) => el.id === mediaTargetElementId)
+          ) {
+            updateActiveSlide({
+              customCanvasElements: slide.customCanvasElements.map((el) =>
+                el.id === mediaTargetElementId
+                  ? {
+                      ...el,
+                      kind: media.type === 'svg-diagram' ? 'diagram' : 'image',
+                      svgCode: media.type === 'svg-diagram' ? media.svgCode : undefined,
+                      imageUrl: media.type === 'image' ? media.url : undefined,
+                      cropFit: media.cropFit,
+                      heading: media.title,
+                    }
+                  : el
+              ),
+            });
+            setMediaTargetElementId(null);
+            return;
+          }
+
           updateActiveSlide({
+            hiddenElementIds: slide.hiddenElementIds?.filter(
+              (id) => id !== 'slot-media'
+            ),
             mediaItem:
               slide.presetId === 'lesson-title-page'
                 ? {
                     ...media,
-                    placement:
-                      slide.mediaItem?.placement ?? 'fill-bottom-layer',
+                    placement: slide.mediaItem?.placement ?? 'fill-bottom-layer',
                     cropFit: 'cover',
                   }
                 : media,
-          })
-        }
+          });
+          setMediaTargetElementId(null);
+        }}
       />
 
       <SlideLayoutWaveModal
@@ -1278,10 +1428,13 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
         onSelectPresetOnly={(presetId, recommendedWave) => {
           updateActiveSlide({
             presetId,
+            elementLayouts: undefined,
+            hiddenElementIds: undefined,
             ...(recommendedWave && presetId === 'mwb-starter-quadrant'
               ? { waveVariant: recommendedWave, waveControlPoints: undefined }
               : {}),
           });
+          setSelectedElementId(null);
         }}
         onSelectWaveOnly={(waveVariant, invertWaveLayers) => {
           updateActiveSlide({

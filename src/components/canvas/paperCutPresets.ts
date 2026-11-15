@@ -256,11 +256,53 @@ function solveHorizontalBottomBoundary(
   return vals;
 }
 
+function appendDynamicElementObstacles(
+  slide: SlideData,
+  baseBoxes: ObstacleBox[]
+): ObstacleBox[] {
+  const boxes = [...baseBoxes];
+  const hidden = new Set(slide.hiddenElementIds || []);
+
+  if (slide.elementLayouts) {
+    for (const [elId, box] of Object.entries(slide.elementLayouts)) {
+      if (hidden.has(elId)) continue;
+      boxes.push({
+        x: box.x,
+        y: box.y,
+        w: box.w,
+        h: box.h,
+        layer: box.layer === 'bottom' ? 'bottom' : 'top',
+      });
+    }
+  }
+
+  if (slide.customCanvasElements) {
+    for (const el of slide.customCanvasElements) {
+      if (hidden.has(el.id)) continue;
+      const override = slide.elementLayouts?.[el.id];
+      if (override) continue;
+      boxes.push({
+        x: (el.x / 100) * 1920,
+        y: (el.y / 100) * 1080,
+        w: (el.w / 100) * 1920,
+        h: (el.h / 100) * 1080,
+        layer: el.layer || 'top',
+      });
+    }
+  }
+
+  return boxes;
+}
+
 /**
  * Estimate 1920x1080 bounding boxes for slide content so procedural waves keep safe clearance
  * while leaving sufficient corridor room for pronounced natural waviness.
  */
 export function estimateSlideObstacles(slide: SlideData): ObstacleBox[] {
+  return appendDynamicElementObstacles(slide, estimateBasePresetObstacles(slide));
+}
+
+function estimateBasePresetObstacles(slide: SlideData): ObstacleBox[] {
   const boxes: ObstacleBox[] = [];
   const isLessonTitlePage = slide.presetId === 'lesson-title-page';
   const isTitleDivider = slide.presetId === 'title-divider';
@@ -465,18 +507,6 @@ export function estimateSlideObstacles(slide: SlideData): ObstacleBox[] {
       h: 640,
       layer: 'bottom',
     });
-  }
-
-  if (slide.presetId === 'custom' && slide.customCanvasElements) {
-    for (const el of slide.customCanvasElements) {
-      boxes.push({
-        x: (el.x / 100) * 1920,
-        y: (el.y / 100) * 1080,
-        w: (el.w / 100) * 1920,
-        h: (el.h / 100) * 1080,
-        layer: el.layer || 'top',
-      });
-    }
   }
 
   return boxes;

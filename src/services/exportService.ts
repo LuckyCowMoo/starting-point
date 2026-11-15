@@ -1,50 +1,114 @@
 import PptxGenJS from 'pptxgenjs';
 import { PlannedLesson, SlideData } from '../types/curriculum';
 import { PHASE_PALETTES } from '../data/palettes';
-import { rasterizePaperCutToPngDataUrl } from '../components/canvas/PaperCutRenderer';
+import {
+  rasterizePaperCutToPngDataUrl,
+  sanitizeSvgMarkup,
+} from '../components/canvas/PaperCutRenderer';
 import {
   estimateSlideObstacles,
   isSlideRegionDark,
 } from '../components/canvas/paperCutPresets';
 import { isMcOptionCorrect } from '../components/canvas/SlideCanvas';
 
+function cleanHex(color?: string, fallback = '0F172A'): string {
+  const c = (color || '').replace('#', '').trim();
+  return /^[0-9a-fA-F]{6}$/.test(c) ? c.toUpperCase() : fallback;
+}
+
+function safeText(val?: unknown): string {
+  return typeof val === 'string' ? val : val == null ? '' : String(val);
+}
+
+const pxX = (px: number) => Number(((px / 1920) * 13.333).toFixed(3));
+const pxY = (px: number) => Number(((px / 1080) * 7.5).toFixed(3));
+
+function getOverrideBox(slide: SlideData, slotId: string) {
+  const o = slide.elementLayouts?.[slotId];
+  if (!o) return null;
+  return {
+    x: pxX(o.x),
+    y: pxY(o.y),
+    w: Math.max(0.5, pxX(o.w)),
+    h: Math.max(0.35, pxY(o.h)),
+    layer: o.layer,
+    boxed: o.boxed,
+  };
+}
+
 async function svgStringToPngDataUrl(
   svgCode: string,
   width = 1280,
   height = 800
-): Promise<string> {
-  const blob = new Blob([svgCode], { type: 'image/svg+xml;charset=utf-8' });
+): Promise<string | null> {
+  if (!svgCode || !svgCode.trim()) return null;
+  const normalized = sanitizeSvgMarkup(svgCode);
+  const blob = new Blob([normalized], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const image = new Image();
       image.onload = () => resolve(image);
-      image.onerror = reject;
+      image.onerror = () => reject(new Error('SVG rasterization failed'));
       image.src = url;
     });
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Canvas 2D unavailable');
+    if (!ctx) return null;
     ctx.drawImage(img, 0, 0, width, height);
     return canvas.toDataURL('image/png');
+  } catch {
+    return null;
   } finally {
     URL.revokeObjectURL(url);
   }
 }
 
 async function imageUrlToDataUrl(url: string): Promise<string | null> {
-  if (url.startsWith('data:')) return url;
+  if (!url) return null;
   try {
-    const res = await fetch(url, { mode: 'cors' });
-    const blob = await res.blob();
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    if (
+      url.startsWith('data:image/png;base64,') ||
+      url.startsWith('data:image/jpeg;base64,')
+    ) {
+      return url;
+    }
+
+    let objectUrl: string | null = null;
+    let srcToLoad = url;
+    if (!url.startsWith('data:')) {
+      const res = await fetch(url, { mode: 'cors' });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      if (!blob.type.startsWith('image/')) return null;
+      objectUrl = URL.createObjectURL(blob);
+      srcToLoad = objectUrl;
+    }
+
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.crossOrigin = 'anonymous';
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('Image load failed'));
+        image.src = srcToLoad;
+      });
+      const maxDim = 1600;
+      const natW = Math.max(1, img.naturalWidth || img.width || 1200);
+      const natH = Math.max(1, img.naturalHeight || img.height || 900);
+      const ratio = Math.min(1, maxDim / Math.max(natW, natH));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(natW * ratio));
+      canvas.height = Math.max(1, Math.round(natH * ratio));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/png');
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }
   } catch {
     return null;
   }
@@ -73,12 +137,19 @@ export async function generateLessonPptxBlob(
   const pptx = new PptxGenJS();
   pptx.layout = 'LAYOUT_WIDE'; // 13.333" x 7.5" (16:9)
   pptx.author = 'Starting Point';
-  pptx.title = lesson.title;
+  pptx.title = safeText(lesson.title) || 'Lesson Slides';
 
   for (let i = 0; i < lesson.slidesData.length; i++) {
     const slide = lesson.slidesData[i];
     const palette = PHASE_PALETTES[slide.phase];
-    onProgress?.(`Rendering 3D paper-cut slide ${i + 1} of ${lesson.slidesData.length}...`);
+    const accentHex = cleanHex(palette.accent, '047857');
+    const darkInkHex = cleanHex(palette.darkInk, '0F172A');
+    const borderHex = cleanHex(palette.borderAccent, 'CBD5E1');
+    const hidden = new Set(slide.hiddenElementIds || []);
+
+    onProgress?.(
+      `Rendering 3D paper-cut slide ${i + 1} of ${lesson.slidesData.length}...`
+    );
 
     const obstacles = estimateSlideObstacles(slide);
     const mediaPlacement =
@@ -103,8 +174,6 @@ export async function generateLessonPptxBlob(
       Boolean(slide.invertWaveLayers)
     );
 
-    // For 4-Quadrant MWB Starter, generate 5 progressive reveal states (0..4)
-    // so pressing forward once in Google Slides or PowerPoint reveals one answer at a time!
     const revealStates =
       slide.presetId === 'mwb-starter-quadrant' && slide.starterQuadrants?.length
         ? [0, 1, 2, 3, 4]
@@ -115,9 +184,6 @@ export async function generateLessonPptxBlob(
       'header',
       Boolean(slide.invertWaveLayers)
     );
-    const headerTextColor = headerIsDark
-      ? 'FFFFFF'
-      : palette.darkInk.replace('#', '');
     const isBlockOnDark = (layer?: 'top' | 'bottom') =>
       isSlideRegionDark(
         slide.waveVariant,
@@ -130,216 +196,341 @@ export async function generateLessonPptxBlob(
       pptSlide.background = { data: bgPng };
       addSpeakerNotesAndBadges(pptSlide, slide);
 
-      // Clean Single-Line Title (rendered by lesson-title-page itself below date)
+      // Header title & timer/controls (non-title-page slides)
       if (slide.presetId !== 'lesson-title-page') {
-        pptSlide.addText(slide.title, {
-          x: 0.65,
-          y: 0.35,
-          w: 9.5,
-          h: 0.72,
-          fontFace: 'Outfit',
-          fontSize: slide.presetId === 'title-divider' ? 38 : 30,
-          bold: true,
-          color: headerTextColor,
-        });
+        if (slide.presetId !== 'title-divider' && !hidden.has('slot-title')) {
+          const titleOv = getOverrideBox(slide, 'slot-title');
+          const titleOnDark = titleOv?.layer
+            ? titleOv.layer === 'bottom'
+            : headerIsDark;
+          const titleBox = titleOv || {
+            x: 0.65,
+            y: 0.35,
+            w: 9.5,
+            h: 0.72,
+          };
+          if (titleOv?.boxed) {
+            pptSlide.addShape(pptx.ShapeType.roundRect, {
+              x: titleBox.x,
+              y: titleBox.y,
+              w: titleBox.w,
+              h: titleBox.h,
+              fill: { color: titleOnDark ? '1E293B' : 'FFFFFF', transparency: 8 },
+              line: { color: titleOnDark ? '64748B' : borderHex, width: 1.2 },
+              rectRadius: 0.14,
+            });
+          }
+          pptSlide.addText(safeText(slide.title), {
+            x: titleBox.x + (titleOv?.boxed ? 0.14 : 0),
+            y: titleBox.y,
+            w: Math.max(0.5, titleBox.w - (titleOv?.boxed ? 0.28 : 0)),
+            h: titleBox.h,
+            fontFace: 'Outfit',
+            fontSize: 30,
+            bold: true,
+            color: titleOnDark ? 'FFFFFF' : darkInkHex,
+          });
+        }
+
+        if (slide.timerSeconds && slide.timerSeconds > 0 && !hidden.has('slot-controls')) {
+          const ctrlOv = getOverrideBox(slide, 'slot-controls');
+          const mins = Math.max(1, Math.round(slide.timerSeconds / 60));
+          pptSlide.addText(`${mins} MIN${mins === 1 ? '' : 'S'}`, {
+            x: ctrlOv?.x ?? 11.1,
+            y: ctrlOv?.y ?? 0.38,
+            w: ctrlOv?.w ?? 1.55,
+            h: ctrlOv?.h ?? 0.42,
+            align: 'center',
+            fontFace: 'JetBrains Mono',
+            fontSize: 13,
+            bold: true,
+            color: accentHex,
+            fill: { color: 'FAF6F0' },
+            line: { color: accentHex, width: 1.5 },
+            rectRadius: 0.1,
+          });
+        }
       }
 
-      // Visual Timer Badge (Top Right)
-      if (slide.timerSeconds && slide.timerSeconds > 0) {
-        const mins = Math.round(slide.timerSeconds / 60);
-        pptSlide.addText(`${mins} MIN${mins === 1 ? '' : 'S'}`, {
-          x: 11.1,
-          y: 0.38,
-          w: 1.55,
-          h: 0.42,
-          align: 'center',
-          fontFace: 'JetBrains Mono',
-          fontSize: 13,
-          bold: true,
-          color: palette.accent.replace('#', ''),
-          fill: { color: 'FAF6F0' },
-          line: { color: palette.accent.replace('#', ''), width: 1.5 },
-          rectRadius: 0.1,
-        });
-      }
+      const isDualCodingLayout =
+        slide.presetId === 'split-concept-dual-code' ||
+        slide.presetId === 'worked-example-steps';
+      const hasBoxedMedia =
+        slide.presetId !== 'lesson-title-page' &&
+        !hidden.has('slot-media') &&
+        Boolean(slide.mediaItem && mediaPlacement !== 'fill-bottom-layer');
 
-      // 1. 4-Quadrant MWB Starter
+      // 1. 4-Quadrant MWB Starter (unboxed typography by default)
       if (slide.presetId === 'mwb-starter-quadrant' && slide.starterQuadrants) {
-        const positions = [
-          { x: 0.65, y: 1.35 },
-          { x: 6.8, y: 1.35 },
-          { x: 0.65, y: 4.3 },
-          { x: 6.8, y: 4.3 },
+        const defaultPositions = [
+          { x: 0.65, y: 1.35, w: 5.88, h: 2.75 },
+          { x: 6.8, y: 1.35, w: 5.88, h: 2.75 },
+          { x: 0.65, y: 4.3, w: 5.88, h: 2.75 },
+          { x: 6.8, y: 4.3, w: 5.88, h: 2.75 },
         ];
         slide.starterQuadrants.slice(0, 4).forEach((q, qIdx) => {
-          const pos = positions[qIdx];
+          const slotId = `slot-quad-${qIdx}`;
+          if (hidden.has(slotId)) return;
+          const ov = getOverrideBox(slide, slotId);
+          const pos = ov || defaultPositions[qIdx];
           const isRevealed = qIdx < revealCount;
-          pptSlide.addShape(pptx.ShapeType.roundRect, {
-            x: pos.x,
-            y: pos.y,
-            w: 5.88,
-            h: 2.75,
-            fill: { color: 'FAF6F0', transparency: 3 },
-            line: {
-              color: isRevealed ? palette.accent.replace('#', '') : 'E2E8F0',
-              width: isRevealed ? 2 : 1,
-            },
-            rectRadius: 0.15,
-          });
+          const quadOnDark = ov?.layer
+            ? ov.layer === 'bottom'
+            : isBlockOnDark('top');
+          const quadBoxed = Boolean(ov?.boxed);
 
-          // Clean single digit 1..4 badge
+          if (quadBoxed) {
+            pptSlide.addShape(pptx.ShapeType.roundRect, {
+              x: pos.x,
+              y: pos.y,
+              w: pos.w,
+              h: pos.h,
+              fill: { color: quadOnDark ? '1E293B' : 'FFFFFF', transparency: 6 },
+              line: {
+                color: isRevealed ? accentHex : quadOnDark ? '64748B' : 'E2E8F0',
+                width: isRevealed ? 2 : 1,
+              },
+              rectRadius: 0.15,
+            });
+          }
+
           pptSlide.addText(String(qIdx + 1), {
-            x: pos.x + 0.18,
-            y: pos.y + 0.16,
-            w: 0.36,
-            h: 0.36,
+            x: pos.x + 0.12,
+            y: pos.y + 0.12,
+            w: 0.38,
+            h: 0.38,
             align: 'center',
             valign: 'middle',
             fontFace: 'Outfit',
             fontSize: 12,
             bold: true,
-            color: 'FFFFFF',
-            fill: { color: palette.accent.replace('#', '') },
+            color: quadOnDark ? darkInkHex : 'FFFFFF',
+            fill: { color: quadOnDark ? 'FFFFFF' : accentHex },
             rectRadius: 0.08,
           });
 
-          pptSlide.addText(q.question, {
-            x: pos.x + 0.64,
-            y: pos.y + 0.14,
-            w: 5.05,
-            h: q.options && q.options.length > 0 ? 0.78 : 1.75,
+          pptSlide.addText(safeText(q.question), {
+            x: pos.x + 0.62,
+            y: pos.y + 0.1,
+            w: Math.max(1.2, pos.w - 0.72),
+            h: q.options && q.options.length > 0 ? 0.8 : Math.max(0.8, pos.h - 0.9),
             fontFace: 'Plus Jakarta Sans',
             fontSize: 14,
             bold: true,
-            color: '18181B',
+            color: quadOnDark ? 'FFFFFF' : darkInkHex,
             valign: 'top',
           });
 
           if (q.options && q.options.length > 0) {
+            const colW = Math.max(1.0, (pos.w - 0.72) / 2);
             q.options.slice(0, 4).forEach((opt, optIdx) => {
               const col = optIdx % 2;
               const row = Math.floor(optIdx / 2);
               const letter = ['A', 'B', 'C', 'D'][optIdx];
-              const cleanOpt = opt.replace(/^[A-D][\s.):\-]+/i, '');
+              const cleanOpt = safeText(opt).replace(/^[A-D][\s.):\-]+/i, '');
               const isCorrect = isMcOptionCorrect(opt, optIdx, q.answer);
-              const optFill = isRevealed
-                ? isCorrect
-                  ? '059669'
-                  : 'F4F4F5'
-                : 'FFFFFF';
-              const optLine = isRevealed
-                ? isCorrect
-                  ? '047857'
-                  : 'E4E4E7'
-                : 'E2E8F0';
               const optColor = isRevealed
                 ? isCorrect
                   ? 'FFFFFF'
+                  : quadOnDark
+                  ? '94A3B8'
                   : '9CA3AF'
+                : quadOnDark
+                ? 'F1F5F9'
                 : '334155';
 
-              pptSlide.addText(`${letter}  ${cleanOpt}`, {
-                x: pos.x + 0.18 + col * 2.8,
-                y: pos.y + 1.04 + row * 0.64,
-                w: 2.7,
-                h: 0.54,
+              pptSlide.addText(`${letter}. ${cleanOpt}`, {
+                x: pos.x + 0.56 + col * colW,
+                y: pos.y + 1.02 + row * 0.62,
+                w: Math.max(0.8, colW - 0.12),
+                h: 0.52,
                 fontFace: 'Plus Jakarta Sans',
-                fontSize: 11,
+                fontSize: 11.5,
                 bold: Boolean(isRevealed && isCorrect),
                 color: optColor,
-                fill: { color: optFill },
-                line: { color: optLine, width: isRevealed && isCorrect ? 1.5 : 0.75 },
-                rectRadius: 0.08,
+                ...(isRevealed && isCorrect
+                  ? {
+                      fill: { color: '059669' },
+                      line: { color: '047857', width: 1.5 },
+                      rectRadius: 0.08,
+                    }
+                  : {}),
               });
             });
           } else if (isRevealed) {
-            pptSlide.addText(q.answer, {
-              x: pos.x + 0.18,
-              y: pos.y + 2.02,
-              w: 5.5,
-              h: 0.56,
+            pptSlide.addText(safeText(q.answer), {
+              x: pos.x + 0.56,
+              y: pos.y + Math.max(1.2, pos.h - 0.72),
+              w: Math.max(1.0, pos.w - 0.7),
+              h: 0.54,
               fontFace: 'Plus Jakarta Sans',
               fontSize: 12.5,
               bold: true,
-              color: '064E3B',
-              fill: { color: 'ECFDF5' },
-              line: { color: '10B981', width: 1 },
+              color: 'FFFFFF',
+              fill: { color: '059669' },
+              line: { color: '047857', width: 1 },
               rectRadius: 0.08,
               valign: 'middle',
             });
           }
         });
-        continue;
-      }
-
-      // 2. Lesson Title Page
-      if (slide.presetId === 'lesson-title-page') {
-        const dateStr =
-          slide.lessonDate ||
-          new Date().toLocaleDateString('en-GB', {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-          });
-
-        pptSlide.addShape(pptx.ShapeType.roundRect, {
-          x: 0.65,
-          y: 0.5,
-          w: 3.6,
-          h: 0.45,
-          fill: { color: 'FFFFFF', transparency: 4 },
-          line: { color: palette.accent.replace('#', ''), width: 1.5 },
-          rectRadius: 0.2,
-        });
-        pptSlide.addText(dateStr, {
-          x: 0.75,
-          y: 0.52,
-          w: 3.4,
-          h: 0.42,
-          fontFace: 'Outfit',
-          fontSize: 13,
-          bold: true,
-          color: palette.accent.replace('#', ''),
-          valign: 'middle',
-        });
-
-        pptSlide.addText(slide.title, {
-          x: 0.65,
-          y: 1.15,
-          w: 6.2,
-          h: 1.85,
-          fontFace: 'Outfit',
-          fontSize: 38,
-          bold: true,
-          color: headerTextColor,
-          valign: 'top',
-        });
-
-        if (slide.bigQuestion) {
-          pptSlide.addShape(pptx.ShapeType.roundRect, {
-            x: 0.65,
-            y: 3.25,
-            w: 6.1,
-            h: 2.0,
-            fill: { color: 'FFFFFF', transparency: 5 },
-            line: { color: palette.accent.replace('#', ''), width: 2.5 },
-            rectRadius: 0.18,
-          });
-          pptSlide.addText(`TODAY'S ENQUIRY\n${slide.bigQuestion}`, {
-            x: 0.9,
-            y: 3.4,
-            w: 5.6,
-            h: 1.7,
+      } else if (slide.presetId === 'lesson-title-page') {
+        // 2. Lesson Title Page (unboxed by default)
+        if (!hidden.has('slot-date')) {
+          const dateOv = getOverrideBox(slide, 'slot-date');
+          const dateOnDark = dateOv?.layer
+            ? dateOv.layer === 'bottom'
+            : isBlockOnDark('top');
+          const dateStr =
+            slide.lessonDate ||
+            new Date().toLocaleDateString('en-GB', {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            });
+          const dateBox = dateOv || { x: 0.65, y: 0.5, w: 4.5, h: 0.45 };
+          if (dateOv?.boxed) {
+            pptSlide.addShape(pptx.ShapeType.roundRect, {
+              x: dateBox.x,
+              y: dateBox.y,
+              w: dateBox.w,
+              h: dateBox.h,
+              fill: { color: dateOnDark ? '1E293B' : 'FFFFFF', transparency: 4 },
+              line: { color: accentHex, width: 1.5 },
+              rectRadius: 0.2,
+            });
+          }
+          pptSlide.addText(safeText(dateStr), {
+            x: dateBox.x + (dateOv?.boxed ? 0.14 : 0),
+            y: dateBox.y,
+            w: Math.max(1, dateBox.w - (dateOv?.boxed ? 0.28 : 0)),
+            h: dateBox.h,
             fontFace: 'Outfit',
-            fontSize: 19,
+            fontSize: 14,
             bold: true,
-            color: '18181B',
+            color: dateOnDark ? 'FFFFFF' : accentHex,
             valign: 'middle',
           });
         }
 
-        if (slide.mediaItem && mediaPlacement !== 'fill-bottom-layer') {
+        if (!hidden.has('slot-title')) {
+          const titleOv = getOverrideBox(slide, 'slot-title');
+          const titleOnDark = titleOv?.layer
+            ? titleOv.layer === 'bottom'
+            : isBlockOnDark('top');
+          const titleBox = titleOv || { x: 0.65, y: 1.15, w: 6.2, h: 1.85 };
+          if (titleOv?.boxed) {
+            pptSlide.addShape(pptx.ShapeType.roundRect, {
+              x: titleBox.x,
+              y: titleBox.y,
+              w: titleBox.w,
+              h: titleBox.h,
+              fill: { color: titleOnDark ? '1E293B' : 'FFFFFF', transparency: 6 },
+              line: { color: borderHex, width: 1.2 },
+              rectRadius: 0.16,
+            });
+          }
+          pptSlide.addText(safeText(slide.title), {
+            x: titleBox.x + (titleOv?.boxed ? 0.15 : 0),
+            y: titleBox.y,
+            w: Math.max(1, titleBox.w - (titleOv?.boxed ? 0.3 : 0)),
+            h: titleBox.h,
+            fontFace: 'Outfit',
+            fontSize: 38,
+            bold: true,
+            color: titleOnDark ? 'FFFFFF' : darkInkHex,
+            valign: 'top',
+          });
+        }
+
+        if (slide.bigQuestion && !hidden.has('slot-big-question')) {
+          const bqOv = getOverrideBox(slide, 'slot-big-question');
+          const bqOnDark = bqOv?.layer
+            ? bqOv.layer === 'bottom'
+            : isBlockOnDark('top');
+          const bqBox = bqOv || { x: 0.65, y: 3.25, w: 6.1, h: 2.0 };
+          if (bqOv?.boxed) {
+            pptSlide.addShape(pptx.ShapeType.roundRect, {
+              x: bqBox.x,
+              y: bqBox.y,
+              w: bqBox.w,
+              h: bqBox.h,
+              fill: { color: bqOnDark ? '1E293B' : 'FFFFFF', transparency: 5 },
+              line: { color: accentHex, width: 2 },
+              rectRadius: 0.18,
+            });
+          } else {
+            pptSlide.addShape(pptx.ShapeType.rect, {
+              x: bqBox.x,
+              y: bqBox.y + 0.1,
+              w: 0.08,
+              h: Math.max(0.4, bqBox.h - 0.2),
+              fill: { color: bqOnDark ? 'FFFFFF' : accentHex },
+              line: { color: bqOnDark ? 'FFFFFF' : accentHex, width: 0 },
+            });
+          }
+          pptSlide.addText(
+            [
+              {
+                text: "TODAY'S ENQUIRY\n",
+                options: {
+                  bold: true,
+                  fontSize: 11,
+                  color: bqOnDark ? 'FFFFFF' : accentHex,
+                },
+              },
+              {
+                text: safeText(slide.bigQuestion),
+                options: {
+                  bold: true,
+                  fontSize: 18,
+                  color: bqOnDark ? 'FFFFFF' : darkInkHex,
+                },
+              },
+            ],
+            {
+              x: bqBox.x + 0.24,
+              y: bqBox.y + 0.08,
+              w: Math.max(1, bqBox.w - 0.36),
+              h: Math.max(0.6, bqBox.h - 0.16),
+              fontFace: 'Outfit',
+              valign: 'middle',
+            }
+          );
+        }
+
+        if (
+          slide.keyTermsStrip &&
+          slide.keyTermsStrip.length > 0 &&
+          !hidden.has('slot-terms-inline')
+        ) {
+          const termsOv = getOverrideBox(slide, 'slot-terms-inline');
+          const termsOnDark = termsOv?.layer
+            ? termsOv.layer === 'bottom'
+            : isBlockOnDark('top');
+          const termsBox = termsOv || { x: 0.65, y: 6.1, w: 6.1, h: 0.7 };
+          const joinedTerms = slide.keyTermsStrip.map((kt) => kt.term).join('   •   ');
+          pptSlide.addText(joinedTerms, {
+            x: termsBox.x,
+            y: termsBox.y,
+            w: termsBox.w,
+            h: termsBox.h,
+            fontFace: 'Plus Jakarta Sans',
+            fontSize: 14,
+            bold: true,
+            color: termsOnDark ? 'FFFFFF' : accentHex,
+            valign: 'middle',
+          });
+        }
+
+        if (
+          slide.mediaItem &&
+          mediaPlacement !== 'fill-bottom-layer' &&
+          !hidden.has('slot-media')
+        ) {
+          const mediaOv = getOverrideBox(slide, 'slot-media');
+          const mBox = mediaOv || { x: 7.3, y: 0.85, w: 5.4, h: 5.6 };
           let coverUri: string | null = null;
           if (slide.mediaItem.type === 'svg-diagram' && slide.mediaItem.svgCode) {
             coverUri = await svgStringToPngDataUrl(slide.mediaItem.svgCode);
@@ -349,144 +540,136 @@ export async function generateLessonPptxBlob(
           if (coverUri) {
             pptSlide.addImage({
               data: coverUri,
-              x: 7.3,
-              y: 0.85,
-              w: 5.4,
-              h: 5.6,
-              sizing: { type: 'contain', w: 5.4, h: 5.6 },
+              x: mBox.x,
+              y: mBox.y,
+              w: mBox.w,
+              h: mBox.h,
+              sizing: {
+                type: slide.mediaItem.cropFit === 'contain' ? 'contain' : 'cover',
+                w: mBox.w,
+                h: mBox.h,
+              },
             });
           }
         }
-        continue;
-      }
-
-      // 3. Title & Big Question Divider
-      if (slide.presetId === 'title-divider') {
-        if (slide.bigQuestion) {
-          pptSlide.addShape(pptx.ShapeType.roundRect, {
-            x: 0.65,
-            y: 2.0,
-            w: 7.4,
-            h: 2.2,
-            fill: { color: 'FFFFFF', transparency: 5 },
-            line: { color: palette.accent.replace('#', ''), width: 2.5 },
-            rectRadius: 0.18,
-          });
-          pptSlide.addText(`BIG QUESTION\n${slide.bigQuestion}`, {
-            x: 0.9,
-            y: 2.2,
-            w: 6.9,
-            h: 1.8,
+      } else if (slide.presetId === 'title-divider') {
+        // 3. Title & Big Question Divider
+        if (!hidden.has('slot-title')) {
+          const titleOv = getOverrideBox(slide, 'slot-title');
+          const titleOnDark = titleOv?.layer
+            ? titleOv.layer === 'bottom'
+            : isBlockOnDark('top');
+          const titleBox = titleOv || { x: 0.65, y: 0.55, w: 8.5, h: 1.2 };
+          pptSlide.addText(safeText(slide.title), {
+            x: titleBox.x,
+            y: titleBox.y,
+            w: titleBox.w,
+            h: titleBox.h,
             fontFace: 'Outfit',
-            fontSize: 21,
+            fontSize: 38,
             bold: true,
-            color: '18181B',
+            color: titleOnDark ? 'FFFFFF' : darkInkHex,
+          });
+        }
+
+        if (slide.bigQuestion && !hidden.has('slot-big-question')) {
+          const bqOv = getOverrideBox(slide, 'slot-big-question');
+          const bqOnDark = bqOv?.layer
+            ? bqOv.layer === 'bottom'
+            : isBlockOnDark('top');
+          const bqBox = bqOv || { x: 0.65, y: 2.0, w: 7.4, h: 2.2 };
+          if (bqOv?.boxed) {
+            pptSlide.addShape(pptx.ShapeType.roundRect, {
+              x: bqBox.x,
+              y: bqBox.y,
+              w: bqBox.w,
+              h: bqBox.h,
+              fill: { color: bqOnDark ? '1E293B' : 'FFFFFF', transparency: 5 },
+              line: { color: accentHex, width: 2 },
+              rectRadius: 0.18,
+            });
+          } else {
+            pptSlide.addShape(pptx.ShapeType.rect, {
+              x: bqBox.x,
+              y: bqBox.y + 0.12,
+              w: 0.09,
+              h: Math.max(0.4, bqBox.h - 0.24),
+              fill: { color: bqOnDark ? 'FFFFFF' : accentHex },
+              line: { color: bqOnDark ? 'FFFFFF' : accentHex, width: 0 },
+            });
+          }
+          pptSlide.addText(safeText(slide.bigQuestion), {
+            x: bqBox.x + 0.25,
+            y: bqBox.y + 0.1,
+            w: Math.max(1, bqBox.w - 0.35),
+            h: Math.max(0.5, bqBox.h - 0.2),
+            fontFace: 'Outfit',
+            fontSize: 22,
+            bold: true,
+            color: bqOnDark ? 'FFFFFF' : darkInkHex,
             valign: 'middle',
           });
         }
 
         if (slide.keyTermsStrip) {
           slide.keyTermsStrip.slice(0, 3).forEach((kt, idx) => {
-            const xPos = 0.65 + idx * 3.95;
-            pptSlide.addShape(pptx.ShapeType.roundRect, {
-              x: xPos,
-              y: 5.05,
-              w: 3.7,
-              h: 1.75,
-              fill: { color: 'FFFFFF', transparency: 5 },
-              line: { color: 'E4E4E7', width: 1 },
-              rectRadius: 0.14,
-            });
-            pptSlide.addText(
-              [
-                { text: `${kt.term}\n`, options: { bold: true, fontSize: 15, color: palette.accent.replace('#', '') } },
-                { text: kt.definition, options: { fontSize: 12, color: '3F3F46' } },
-              ],
-              { x: xPos + 0.2, y: 5.2, w: 3.3, h: 1.45, valign: 'top' }
-            );
-          });
-        }
-        continue;
-      }
+            const slotId = `slot-term-${idx}`;
+            if (hidden.has(slotId)) return;
+            const ov = getOverrideBox(slide, slotId);
+            const termOnDark = ov?.layer
+              ? ov.layer === 'bottom'
+              : isBlockOnDark('top');
+            const box = ov || { x: 0.65 + idx * 3.95, y: 5.05, w: 3.7, h: 1.75 };
 
-      // 3. Bespoke AI Custom Canvas Elements
-      if (slide.presetId === 'custom' && slide.customCanvasElements) {
-        for (const el of slide.customCanvasElements) {
-          const x = (el.x / 100) * 13.333;
-          const y = (el.y / 100) * 7.5;
-          const w = (el.w / 100) * 13.333;
-          const h = (el.h / 100) * 7.5;
-          const isBottomLayer = el.layer === 'bottom' || el.tone === 'dark';
-
-          if (!isBottomLayer) {
-            pptSlide.addShape(pptx.ShapeType.roundRect, {
-              x,
-              y,
-              w,
-              h,
-              fill: { color: 'FAF6F0', transparency: 4 },
-              line: { color: 'E4E4E7', width: 1 },
-              rectRadius: 0.14,
-            });
-          }
-
-          if (el.kind === 'diagram' && el.svgCode) {
-            const png = await svgStringToPngDataUrl(el.svgCode);
-            pptSlide.addImage({
-              data: png,
-              x: x + 0.15,
-              y: y + 0.45,
-              w: w - 0.3,
-              h: h - 0.6,
-              sizing: { type: 'contain', w: w - 0.3, h: h - 0.6 },
-            });
-            if (el.heading) {
-              pptSlide.addText(el.heading, {
-                x: x + 0.15,
-                y: y + 0.1,
-                w: w - 0.3,
-                h: 0.35,
-                fontSize: 13,
-                bold: true,
-                color: isBottomLayer ? 'FFFFFF' : palette.accent.replace('#', ''),
+            if (ov?.boxed) {
+              pptSlide.addShape(pptx.ShapeType.roundRect, {
+                x: box.x,
+                y: box.y,
+                w: box.w,
+                h: box.h,
+                fill: { color: termOnDark ? '1E293B' : 'FFFFFF', transparency: 5 },
+                line: { color: borderHex, width: 1 },
+                rectRadius: 0.14,
+              });
+            } else {
+              pptSlide.addShape(pptx.ShapeType.rect, {
+                x: box.x,
+                y: box.y,
+                w: Math.min(box.w, 1.4),
+                h: 0.05,
+                fill: { color: termOnDark ? 'FFFFFF' : accentHex },
+                line: { color: termOnDark ? 'FFFFFF' : accentHex, width: 0 },
               });
             }
-          } else {
             pptSlide.addText(
               [
-                ...(el.heading
-                  ? [{ text: `${el.heading}\n`, options: { bold: true, fontSize: 14, color: isBottomLayer ? 'FFFFFF' : palette.accent.replace('#', '') } }]
-                  : []),
                 {
-                  text: el.content,
+                  text: `${safeText(kt.term)}\n`,
                   options: {
-                    fontSize: 12,
-                    color: isBottomLayer ? 'F1F5F9' : '27272A',
+                    bold: true,
+                    fontSize: 16,
+                    color: termOnDark ? 'FFFFFF' : accentHex,
+                  },
+                },
+                {
+                  text: safeText(kt.definition),
+                  options: {
+                    fontSize: 13,
+                    color: termOnDark ? 'F1F5F9' : '3F3F46',
                   },
                 },
               ],
-              { x: x + 0.2, y: y + 0.15, w: w - 0.4, h: h - 0.3, valign: 'top' }
+              {
+                x: box.x + (ov?.boxed ? 0.16 : 0),
+                y: box.y + 0.12,
+                w: Math.max(0.8, box.w - (ov?.boxed ? 0.32 : 0)),
+                h: Math.max(0.5, box.h - 0.2),
+                valign: 'top',
+              }
             );
-          }
+          });
         }
-        continue;
-      }
-
-      // 4. Standard Content Blocks + Optional Media
-      const hasBoxedMedia = Boolean(
-        slide.mediaItem && mediaPlacement !== 'fill-bottom-layer'
-      );
-      const blockAreaW = hasBoxedMedia ? 6.1 : 12.0;
-      const startX =
-        slide.waveVariant === 'vertical-scurve-left' ||
-        slide.waveVariant === 'dark-canvas-left-paper'
-          ? 3.2
-          : 0.65;
-      const count = Math.max(1, slide.bodyBlocks.length);
-      const blockH = Math.min(1.65, 5.1 / count);
-
-      // 3b. Vocabulary Presets (Words Only / Single Term / Full Glossary)
-      if (
+      } else if (
         (slide.presetId === 'vocab-words-only' ||
           slide.presetId === 'vocab-single-term-focus' ||
           slide.presetId === 'vocabulary-spotlight') &&
@@ -500,141 +683,290 @@ export async function generateLessonPptxBlob(
             }));
 
         if (slide.presetId === 'vocab-single-term-focus' && vocabItems[0]) {
-          const item = vocabItems[0];
-          pptSlide.addShape(pptx.ShapeType.roundRect, {
-            x: 0.65,
-            y: 1.6,
-            w: 6.1,
-            h: 4.5,
-            fill: { color: 'FAF6F0', transparency: 3 },
-            line: { color: palette.accent.replace('#', ''), width: 2 },
-            rectRadius: 0.16,
-          });
-          pptSlide.addText(
-            [
-              { text: `${item.term}\n\n`, options: { bold: true, fontSize: 26, color: palette.accent.replace('#', '') } },
-              { text: item.definition, options: { fontSize: 17, color: '18181B' } },
-            ],
-            { x: 0.9, y: 1.85, w: 5.6, h: 4.0, valign: 'top' }
-          );
+          if (!hidden.has('slot-vocab-focus')) {
+            const ov = getOverrideBox(slide, 'slot-vocab-focus');
+            const onDark = ov?.layer ? ov.layer === 'bottom' : isBlockOnDark('top');
+            const box = ov || { x: 0.65, y: 1.6, w: 6.1, h: 4.5 };
+            const item = vocabItems[0];
+
+            if (ov?.boxed) {
+              pptSlide.addShape(pptx.ShapeType.roundRect, {
+                x: box.x,
+                y: box.y,
+                w: box.w,
+                h: box.h,
+                fill: { color: onDark ? '1E293B' : 'FFFFFF', transparency: 4 },
+                line: { color: accentHex, width: 2 },
+                rectRadius: 0.16,
+              });
+            } else {
+              pptSlide.addShape(pptx.ShapeType.rect, {
+                x: box.x,
+                y: box.y + 0.12,
+                w: 0.09,
+                h: Math.max(0.5, box.h - 0.24),
+                fill: { color: onDark ? 'FFFFFF' : accentHex },
+                line: { color: onDark ? 'FFFFFF' : accentHex, width: 0 },
+              });
+            }
+            pptSlide.addText(
+              [
+                {
+                  text: `${safeText(item.term)}\n\n`,
+                  options: {
+                    bold: true,
+                    fontSize: 28,
+                    color: onDark ? 'FFFFFF' : accentHex,
+                  },
+                },
+                {
+                  text: safeText(item.definition),
+                  options: { fontSize: 18, color: onDark ? 'F1F5F9' : darkInkHex },
+                },
+              ],
+              {
+                x: box.x + 0.26,
+                y: box.y + 0.12,
+                w: Math.max(1, box.w - 0.36),
+                h: Math.max(0.8, box.h - 0.24),
+                valign: 'top',
+              }
+            );
+          }
         } else {
           const isWordsOnly = slide.presetId === 'vocab-words-only';
           vocabItems.slice(0, 6).forEach((vt, idx) => {
-            const rowH = vocabItems.length >= 5 ? 0.88 : 1.1;
-            const yPos = 1.45 + idx * (rowH + 0.12);
-            pptSlide.addShape(pptx.ShapeType.roundRect, {
-              x: 0.65,
-              y: yPos,
-              w: 6.1,
-              h: rowH,
-              fill: { color: 'FAF6F0', transparency: 3 },
-              line: { color: palette.borderAccent.replace('#', ''), width: 1.2 },
-              rectRadius: 0.12,
-            });
+            const slotId = `slot-vocab-${idx}`;
+            if (hidden.has(slotId)) return;
+            const ov = getOverrideBox(slide, slotId);
+            const onDark = ov?.layer ? ov.layer === 'bottom' : isBlockOnDark('top');
+            const rowH = vocabItems.length >= 5 ? 0.88 : 1.08;
+            const box = ov || { x: 0.65, y: 1.45 + idx * (rowH + 0.1), w: 6.1, h: rowH };
+
+            if (ov?.boxed) {
+              pptSlide.addShape(pptx.ShapeType.roundRect, {
+                x: box.x,
+                y: box.y,
+                w: box.w,
+                h: box.h,
+                fill: { color: onDark ? '1E293B' : 'FFFFFF', transparency: 4 },
+                line: { color: borderHex, width: 1.2 },
+                rectRadius: 0.12,
+              });
+            }
             pptSlide.addText(
               isWordsOnly
-                ? `${vt.term}\n_______________________________________`
+                ? `${safeText(vt.term)}\n_______________________________________`
                 : [
-                    { text: `${vt.term}: `, options: { bold: true, fontSize: 14, color: palette.accent.replace('#', '') } },
-                    { text: vt.definition, options: { fontSize: 13, color: '27272A' } },
+                    {
+                      text: `${safeText(vt.term)}: `,
+                      options: {
+                        bold: true,
+                        fontSize: 15,
+                        color: onDark ? 'FFFFFF' : accentHex,
+                      },
+                    },
+                    {
+                      text: safeText(vt.definition),
+                      options: {
+                        fontSize: 13.5,
+                        color: onDark ? 'F1F5F9' : '27272A',
+                      },
+                    },
                   ],
-              { x: 0.85, y: yPos + 0.08, w: 5.7, h: rowH - 0.16, valign: 'middle' }
+              {
+                x: box.x + (ov?.boxed ? 0.18 : 0),
+                y: box.y + 0.04,
+                w: Math.max(1, box.w - (ov?.boxed ? 0.36 : 0)),
+                h: Math.max(0.4, box.h - 0.08),
+                valign: 'middle',
+              }
             );
           });
         }
       } else if (slide.presetId === 'comparison-two-column') {
-        const half = Math.ceil(slide.bodyBlocks.length / 2);
-        const colA = slide.bodyBlocks.slice(0, half);
-        const colB = slide.bodyBlocks.slice(half);
-        const colW = hasBoxedMedia ? 3.55 : 5.8;
+        const leftBlocks = slide.bodyBlocks.filter((b) => b.column !== 'right');
+        const rightBlocks = slide.bodyBlocks.filter((b) => b.column === 'right');
+        const colW = hasBoxedMedia ? 3.7 : 5.85;
+        const colXCoords = [0.65, 0.65 + colW + 0.35];
 
-        colA.forEach((b, idx) => {
-          const isDarkSurface = isBlockOnDark(b.layer);
-          if (!isDarkSurface) {
-            pptSlide.addShape(pptx.ShapeType.roundRect, {
-              x: 0.65,
-              y: 1.5 + idx * 2.6,
+        [leftBlocks, rightBlocks].forEach((colBlocks, colIdx) => {
+          colBlocks.forEach((b, idx) => {
+            if (hidden.has(b.id)) return;
+            const ov = getOverrideBox(slide, b.id);
+            const effectiveLayer = ov?.layer ?? b.layer ?? 'top';
+            const isDarkSurface = isBlockOnDark(effectiveLayer);
+            const isBoxed =
+              ov?.boxed !== undefined
+                ? ov.boxed
+                : b.style === 'boxed' || b.style === 'code';
+            const slotH = 4.9 / Math.max(1, colBlocks.length);
+            const box = ov || {
+              x: colXCoords[colIdx],
+              y: 1.5 + idx * (slotH + 0.2),
               w: colW,
-              h: 4.9 / Math.max(1, colA.length),
-              fill: { color: 'FAF6F0', transparency: 4 },
-              line: { color: 'E4E4E7', width: 1 },
-              rectRadius: 0.14,
-            });
-          }
-          pptSlide.addText(
-            [
-              ...(b.heading ? [{ text: `${b.heading}\n`, options: { bold: true, fontSize: 16, color: isDarkSurface ? 'FFFFFF' : palette.accent.replace('#', '') } }] : []),
-              { text: b.content, options: { fontSize: 13, color: isDarkSurface ? 'F1F5F9' : '27272A' } },
-            ],
-            { x: 0.85, y: 1.65 + idx * 2.6, w: colW - 0.4, h: 4.5 / Math.max(1, colA.length), valign: 'top' }
-          );
-        });
+              h: slotH,
+            };
 
-        const colBX = 0.65 + colW + 0.35;
-        colB.forEach((b, idx) => {
-          const isDarkSurface = isBlockOnDark(b.layer);
-          if (!isDarkSurface) {
-            pptSlide.addShape(pptx.ShapeType.roundRect, {
-              x: colBX,
-              y: 1.5 + idx * 2.6,
-              w: colW,
-              h: 4.9 / Math.max(1, colB.length),
-              fill: { color: 'FAF6F0', transparency: 4 },
-              line: { color: 'E4E4E7', width: 1 },
-              rectRadius: 0.14,
-            });
-          }
-          pptSlide.addText(
-            [
-              ...(b.heading ? [{ text: `${b.heading}\n`, options: { bold: true, fontSize: 16, color: isDarkSurface ? 'FFFFFF' : palette.accent.replace('#', '') } }] : []),
-              { text: b.content, options: { fontSize: 13, color: isDarkSurface ? 'F1F5F9' : '27272A' } },
-            ],
-            { x: colBX + 0.2, y: 1.65 + idx * 2.6, w: colW - 0.4, h: 4.5 / Math.max(1, colB.length), valign: 'top' }
-          );
+            if (isBoxed) {
+              pptSlide.addShape(pptx.ShapeType.roundRect, {
+                x: box.x,
+                y: box.y,
+                w: box.w,
+                h: box.h,
+                fill: {
+                  color:
+                    b.style === 'code'
+                      ? '09090B'
+                      : isDarkSurface
+                      ? '1E293B'
+                      : 'FFFFFF',
+                  transparency: b.style === 'code' ? 0 : 6,
+                },
+                line: { color: isDarkSurface ? '64748B' : borderHex, width: 1.2 },
+                rectRadius: 0.14,
+              });
+            }
+            pptSlide.addText(
+              [
+                ...(b.heading
+                  ? [
+                      {
+                        text: `${safeText(b.heading)}\n`,
+                        options: {
+                          bold: true,
+                          fontSize: 17,
+                          color: isDarkSurface ? 'FFFFFF' : accentHex,
+                        },
+                      },
+                    ]
+                  : []),
+                {
+                  text: safeText(b.content),
+                  options: {
+                    fontSize: 14,
+                    color: isDarkSurface ? 'F1F5F9' : darkInkHex,
+                  },
+                },
+              ],
+              {
+                x: box.x + (isBoxed ? 0.18 : 0),
+                y: box.y + 0.08,
+                w: Math.max(0.8, box.w - (isBoxed ? 0.36 : 0)),
+                h: Math.max(0.4, box.h - 0.16),
+                valign: 'top',
+              }
+            );
+          });
         });
-      } else {
+      } else if (slide.presetId !== 'custom') {
+        // Default, dual-code, process-timeline, worked-example, plenary, hinge, active-task (unboxed by default)
+        const startX =
+          slide.waveVariant === 'vertical-scurve-left' ||
+          slide.waveVariant === 'dark-canvas-left-paper'
+            ? 3.2
+            : 0.65;
+        const blockAreaW =
+          slide.waveVariant === 'vertical-scurve-left' ||
+          slide.waveVariant === 'dark-canvas-left-paper'
+            ? 9.4
+            : hasBoxedMedia || isDualCodingLayout
+            ? 6.0
+            : 11.8;
+        const count = Math.max(1, slide.bodyBlocks.length);
+        const blockH = Math.min(1.65, 5.1 / count);
+
         slide.bodyBlocks.forEach((b, idx) => {
-          const yPos = 1.45 + idx * (blockH + 0.18);
-          const w =
-            slide.waveVariant === 'vertical-scurve-left' ||
-            slide.waveVariant === 'dark-canvas-left-paper'
-              ? 9.4
-              : blockAreaW;
-          const isPlainBlock = b.style === 'plain';
-          const isDarkSurface = isBlockOnDark(b.layer);
-          if (!isDarkSurface && !isPlainBlock) {
+          if (hidden.has(b.id)) return;
+          const ov = getOverrideBox(slide, b.id);
+          const effectiveLayer = ov?.layer ?? b.layer ?? 'top';
+          const isDarkSurface = isBlockOnDark(effectiveLayer);
+          const isCode = b.style === 'code';
+          const isBoxed =
+            ov?.boxed !== undefined ? ov.boxed : b.style === 'boxed' || isCode;
+          const isHighlight = !isBoxed && (b.style === 'highlight' || b.style === 'challenge');
+          const box = ov || {
+            x: startX,
+            y: 1.45 + idx * (blockH + 0.18),
+            w: blockAreaW,
+            h: blockH,
+          };
+
+          if (isBoxed) {
             pptSlide.addShape(pptx.ShapeType.roundRect, {
-              x: startX,
-              y: yPos,
-              w,
-              h: blockH,
-              fill: { color: b.style === 'code' ? '09090B' : 'FAF6F0', transparency: 4 },
-              line: { color: palette.borderAccent.replace('#', ''), width: 1.2 },
+              x: box.x,
+              y: box.y,
+              w: box.w,
+              h: box.h,
+              fill: {
+                color: isCode ? '09090B' : isDarkSurface ? '1E293B' : 'FFFFFF',
+                transparency: isCode ? 0 : 6,
+              },
+              line: { color: isDarkSurface ? '64748B' : borderHex, width: 1.2 },
               rectRadius: 0.14,
             });
+          } else if (isHighlight) {
+            pptSlide.addShape(pptx.ShapeType.rect, {
+              x: box.x,
+              y: box.y + 0.08,
+              w: 0.08,
+              h: Math.max(0.35, box.h - 0.16),
+              fill: { color: isDarkSurface ? 'FFFFFF' : accentHex },
+              line: { color: isDarkSurface ? 'FFFFFF' : accentHex, width: 0 },
+            });
           }
+
           pptSlide.addText(
             [
               ...(b.heading
-                ? [{ text: `${b.heading}\n`, options: { bold: true, fontSize: 15, color: isDarkSurface ? 'FFFFFF' : b.style === 'code' ? '34D399' : palette.accent.replace('#', '') } }]
+                ? [
+                    {
+                      text: `${safeText(b.heading)}\n`,
+                      options: {
+                        bold: true,
+                        fontSize: 16,
+                        color: isDarkSurface
+                          ? 'FFFFFF'
+                          : isCode
+                          ? '34D399'
+                          : accentHex,
+                      },
+                    },
+                  ]
                 : []),
               {
-                text: b.content,
+                text: safeText(b.content),
                 options: {
-                  fontSize: 13,
-                  fontFace: b.style === 'code' ? 'JetBrains Mono' : 'Plus Jakarta Sans',
-                  color: isDarkSurface ? 'F1F5F9' : b.style === 'code' ? 'A7F3D0' : '27272A',
+                  fontSize: 14,
+                  fontFace: isCode ? 'JetBrains Mono' : 'Plus Jakarta Sans',
+                  color: isDarkSurface
+                    ? 'F1F5F9'
+                    : isCode
+                    ? 'A7F3D0'
+                    : darkInkHex,
                 },
               },
             ],
-            { x: startX + 0.2, y: yPos + 0.12, w: w - 0.4, h: blockH - 0.24, valign: 'top' }
+            {
+              x: box.x + (isBoxed || isHighlight ? 0.2 : 0),
+              y: box.y + 0.06,
+              w: Math.max(0.8, box.w - (isBoxed || isHighlight ? 0.36 : 0)),
+              h: Math.max(0.4, box.h - 0.12),
+              valign: 'top',
+            }
           );
         });
       }
 
+      // Preset media visual slot (moved or default)
       if (hasBoxedMedia && slide.mediaItem) {
-        const mediaX = slide.presetId === 'comparison-two-column' ? 8.3 : 7.15;
-        const mediaW = slide.presetId === 'comparison-two-column' ? 4.4 : 5.5;
+        const mediaOv = getOverrideBox(slide, 'slot-media');
+        const mBox = mediaOv || {
+          x: slide.presetId === 'comparison-two-column' ? 8.3 : 7.15,
+          y: 1.5,
+          w: slide.presetId === 'comparison-two-column' ? 4.4 : 5.5,
+          h: 5.0,
+        };
         let dataUri: string | null = null;
         if (slide.mediaItem.type === 'svg-diagram' && slide.mediaItem.svgCode) {
           dataUri = await svgStringToPngDataUrl(slide.mediaItem.svgCode);
@@ -644,12 +976,115 @@ export async function generateLessonPptxBlob(
         if (dataUri) {
           pptSlide.addImage({
             data: dataUri,
-            x: mediaX,
-            y: 1.5,
-            w: mediaW,
-            h: 5.0,
-            sizing: { type: 'contain', w: mediaW, h: 5.0 },
+            x: mBox.x,
+            y: mBox.y,
+            w: mBox.w,
+            h: mBox.h,
+            sizing: { type: 'contain', w: mBox.w, h: mBox.h },
           });
+        }
+      }
+
+      // Freeform & Custom Canvas Elements (supported on ALL presets!)
+      if (slide.customCanvasElements && slide.customCanvasElements.length > 0) {
+        for (const el of slide.customCanvasElements) {
+          if (hidden.has(el.id)) continue;
+          const ov = getOverrideBox(slide, el.id);
+          const x = ov?.x ?? (el.x / 100) * 13.333;
+          const y = ov?.y ?? (el.y / 100) * 7.5;
+          const w = ov?.w ?? Math.max(0.8, (el.w / 100) * 13.333);
+          const h = ov?.h ?? Math.max(0.5, (el.h / 100) * 7.5);
+          const effectiveLayer = ov?.layer ?? el.layer ?? 'top';
+          const isDarkSurface = isBlockOnDark(effectiveLayer) || el.tone === 'dark';
+          const isBoxed =
+            ov?.boxed !== undefined ? ov.boxed : Boolean(el.boxed);
+
+          if (el.kind === 'image' && el.imageUrl) {
+            const imgUri = await imageUrlToDataUrl(el.imageUrl);
+            if (imgUri) {
+              pptSlide.addImage({
+                data: imgUri,
+                x,
+                y,
+                w,
+                h,
+                sizing: {
+                  type: el.cropFit === 'contain' ? 'contain' : 'cover',
+                  w,
+                  h,
+                },
+              });
+            }
+          } else if (el.svgCode) {
+            const png = await svgStringToPngDataUrl(el.svgCode);
+            if (isBoxed) {
+              pptSlide.addShape(pptx.ShapeType.roundRect, {
+                x,
+                y,
+                w,
+                h,
+                fill: { color: 'FFFFFF', transparency: 4 },
+                line: { color: borderHex, width: 1.2 },
+                rectRadius: 0.14,
+              });
+            }
+            if (png) {
+              pptSlide.addImage({
+                data: png,
+                x: x + 0.12,
+                y: y + 0.12,
+                w: Math.max(0.5, w - 0.24),
+                h: Math.max(0.4, h - 0.24),
+                sizing: {
+                  type: 'contain',
+                  w: Math.max(0.5, w - 0.24),
+                  h: Math.max(0.4, h - 0.24),
+                },
+              });
+            }
+          } else if (el.kind !== 'image') {
+            if (isBoxed) {
+              pptSlide.addShape(pptx.ShapeType.roundRect, {
+                x,
+                y,
+                w,
+                h,
+                fill: { color: isDarkSurface ? '1E293B' : 'FFFFFF', transparency: 6 },
+                line: { color: isDarkSurface ? '64748B' : borderHex, width: 1.2 },
+                rectRadius: 0.14,
+              });
+            }
+            pptSlide.addText(
+              [
+                ...(el.heading
+                  ? [
+                      {
+                        text: `${safeText(el.heading)}\n`,
+                        options: {
+                          bold: true,
+                          fontSize: 15,
+                          color: isDarkSurface ? 'FFFFFF' : accentHex,
+                        },
+                      },
+                    ]
+                  : []),
+                {
+                  text: safeText(el.content),
+                  options: {
+                    fontSize: 13.5,
+                    color: isDarkSurface ? 'F1F5F9' : darkInkHex,
+                  },
+                },
+              ],
+              {
+                x: x + (isBoxed ? 0.18 : 0),
+                y: y + 0.08,
+                w: Math.max(0.8, w - (isBoxed ? 0.36 : 0)),
+                h: Math.max(0.4, h - 0.16),
+                valign: 'top',
+              }
+            );
+          }
         }
       }
     }
@@ -666,13 +1101,18 @@ export async function downloadLessonPptx(
 ): Promise<void> {
   const blob = await generateLessonPptxBlob(lesson, onProgress);
   const url = URL.createObjectURL(blob);
+  const safeName = (lesson.title || 'lesson')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'lesson';
   const a = document.createElement('a');
   a.href = url;
-  a.download = `L${lesson.lessonNumber}-${lesson.title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')}.pptx`;
+  a.download = `L${lesson.lessonNumber}-${safeName}.pptx`;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // --- Direct Google Drive / Google Slides Upload via GIS OAuth ---

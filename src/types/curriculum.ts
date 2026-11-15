@@ -117,11 +117,28 @@ export type DualCodeIconId =
   | 'people'
   | 'check';
 
+export interface ElementBoxOverride {
+  x: number; // 0..1920 px
+  y: number; // 0..1080 px
+  w: number; // width in px
+  h: number; // height in px
+  layer?: 'top' | 'bottom';
+  boxed?: boolean;
+}
+
 export interface SlideTextBlock {
   id: string;
   heading?: string;
   content: string;
-  style?: 'plain' | 'card' | 'highlight' | 'step' | 'code' | 'list-item' | 'challenge';
+  style?:
+    | 'plain'
+    | 'boxed'
+    | 'card'
+    | 'highlight'
+    | 'step'
+    | 'code'
+    | 'list-item'
+    | 'challenge';
   layer?: 'top' | 'bottom';
   routineIcon?: RoutineIconType;
   dualCodeIcon?: DualCodeIconId;
@@ -153,7 +170,15 @@ export interface PaperCutLayer {
 
 export interface BespokeCanvasElement {
   id: string;
-  kind: 'text-card' | 'heading' | 'code-block' | 'diagram' | 'badge' | 'callout';
+  kind:
+    | 'text'
+    | 'text-card'
+    | 'heading'
+    | 'code-block'
+    | 'diagram'
+    | 'image'
+    | 'badge'
+    | 'callout';
   x: number; // percentage 0..100
   y: number; // percentage 0..100
   w: number; // percentage 0..100
@@ -161,6 +186,10 @@ export interface BespokeCanvasElement {
   heading?: string;
   content: string;
   svgCode?: string;
+  imageUrl?: string;
+  cropFit?: 'cover' | 'contain';
+  boxed?: boolean;
+  dualCodeIcon?: DualCodeIconId;
   routineIcon?: RoutineIconType;
   layer?: 'top' | 'bottom';
   tone?: 'creamy' | 'tinted' | 'dark' | 'accent';
@@ -204,6 +233,8 @@ export interface SlideData {
   keyTermsStrip?: { term: string; definition: string }[];
   mediaItem?: SlideMediaItem;
   customCanvasElements?: BespokeCanvasElement[];
+  elementLayouts?: Record<string, ElementBoxOverride>;
+  hiddenElementIds?: string[];
   customWaveLayers?: PaperCutLayer[];
   waveControlPoints?: { x: number; y: number }[];
   timerSeconds?: number;

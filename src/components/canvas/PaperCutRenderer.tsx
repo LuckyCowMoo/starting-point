@@ -23,11 +23,35 @@ interface PaperCutRendererProps {
   className?: string;
 }
 
+export function sanitizeSvgMarkup(rawSvg: string): string {
+  let svg = (rawSvg || '')
+    .trim()
+    .replace(/^```(?:svg|xml|html)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .replace(/&nbsp;/gi, '&#160;')
+    .replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/g, '&amp;');
+
+  if (!/xmlns\s*=/.test(svg)) {
+    svg = svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+  }
+
+  // Ensure explicit width/height attributes exist so canvas drawImage renders reliably
+  const tagMatch = svg.match(/<svg\b[^>]*>/i);
+  if (tagMatch) {
+    let openTag = tagMatch[0];
+    if (!/\bwidth\s*=/.test(openTag)) {
+      openTag = openTag.replace('<svg', '<svg width="1280"');
+    }
+    if (!/\bheight\s*=/.test(openTag)) {
+      openTag = openTag.replace('<svg', '<svg height="800"');
+    }
+    svg = svg.replace(tagMatch[0], openTag);
+  }
+  return svg;
+}
+
 export function svgCodeToDataUri(svgCode: string): string {
-  const hasXmlns = /xmlns\s*=/.test(svgCode);
-  const normalized = hasXmlns
-    ? svgCode
-    : svgCode.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+  const normalized = sanitizeSvgMarkup(svgCode);
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(normalized)}`;
 }
 
@@ -247,5 +271,22 @@ export async function rasterizePaperCutToPngDataUrl(
   }
 
   ctx.restore();
-  return canvas.toDataURL('image/png');
+  try {
+    return canvas.toDataURL('image/png');
+  } catch {
+    if (bottomFillMedia) {
+      return rasterizePaperCutToPngDataUrl(
+        phase,
+        waveVariant,
+        obstacles,
+        customWaveLayers,
+        undefined,
+        width,
+        height,
+        waveControlPoints,
+        invertWaveLayers
+      );
+    }
+    throw new Error('Could not export paper-cut background image.');
+  }
 }

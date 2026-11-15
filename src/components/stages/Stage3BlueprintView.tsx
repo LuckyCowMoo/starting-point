@@ -155,7 +155,7 @@ export const Stage3BlueprintView: React.FC<Stage3BlueprintViewProps> = ({
           : undefined,
         bigQuestion:
           bp.presetId === 'title-divider' || isTitlePage
-            ? bp.contentSummary
+            ? ''
             : undefined,
         bodyBlocks:
           isStarter || isTitlePage
@@ -163,17 +163,10 @@ export const Stage3BlueprintView: React.FC<Stage3BlueprintViewProps> = ({
             : [
                 {
                   id: `blk-${bp.id}-1`,
-                  heading: 'Key Concept',
+                  heading: '',
                   dualCodeIcon: 'concept',
-                  content: bp.contentSummary,
-                  style: bp.phase === 'task' ? 'step' : 'card',
-                },
-                {
-                  id: `blk-${bp.id}-2`,
-                  heading: 'Activity Focus',
-                  dualCodeIcon: 'target',
-                  content: bp.pupilActivity,
-                  style: bp.phase === 'task' ? 'challenge' : 'card',
+                  content: '• Click directly on the slide to type concise pupil-facing points.',
+                  style: bp.phase === 'explanation' ? 'plain' : 'card',
                 },
               ],
         starterQuadrants: isStarter
@@ -181,30 +174,30 @@ export const Stage3BlueprintView: React.FC<Stage3BlueprintViewProps> = ({
               {
                 id: 'q1',
                 label: '1',
-                question: lesson.starterRetrievalFocus.q1LastLesson,
-                options: ['A. Option 1', 'B. Option 2', 'C. Option 3', 'D. Option 4'],
-                answer: 'A — Model answer from last lesson',
+                question: lesson.starterRetrievalFocus.q1LastLesson || 'Question 1...',
+                options: ['A. Choice A', 'B. Choice B', 'C. Choice C', 'D. Choice D'],
+                answer: 'A — Choice A',
               },
               {
                 id: 'q2',
                 label: '2',
-                question: lesson.starterRetrievalFocus.q2LastWeek,
-                options: ['A. Option 1', 'B. Option 2', 'C. Option 3', 'D. Option 4'],
-                answer: 'B — Model answer from last week',
+                question: lesson.starterRetrievalFocus.q2LastWeek || 'Question 2...',
+                options: ['A. Choice A', 'B. Choice B', 'C. Choice C', 'D. Choice D'],
+                answer: 'B — Choice B',
               },
               {
                 id: 'q3',
                 label: '3',
-                question: lesson.starterRetrievalFocus.q3EarlierTopic,
-                options: ['A. Option 1', 'B. Option 2', 'C. Option 3', 'D. Option 4'],
-                answer: 'C — Model answer from earlier topic',
+                question: lesson.starterRetrievalFocus.q3EarlierTopic || 'Question 3...',
+                options: ['A. Choice A', 'B. Choice B', 'C. Choice C', 'D. Choice D'],
+                answer: 'C — Choice C',
               },
               {
                 id: 'q4',
                 label: '4',
-                question: lesson.starterRetrievalFocus.q4Challenge,
-                options: ['A. Option 1', 'B. Option 2', 'C. Option 3', 'D. Option 4'],
-                answer: 'D — Stretch insight connecting to today',
+                question: lesson.starterRetrievalFocus.q4Challenge || 'Question 4...',
+                options: ['A. Choice A', 'B. Choice B', 'C. Choice C', 'D. Choice D'],
+                answer: 'D — Choice D',
               },
             ]
           : undefined,
@@ -213,7 +206,7 @@ export const Stage3BlueprintView: React.FC<Stage3BlueprintViewProps> = ({
           bp.phase === 'starter' || bp.phase === 'task'
             ? bp.allocatedMinutes * 60
             : undefined,
-        speakerNotes: `${bp.pedagogicalRationale.principle}: ${bp.pedagogicalRationale.cognitiveLoadNote}`,
+        speakerNotes: `${bp.contentSummary}\nPupil task: ${bp.pupilActivity}`,
         pedagogicalBadges: bp.pedagogicalRationale,
       };
     });
@@ -225,21 +218,21 @@ export const Stage3BlueprintView: React.FC<Stage3BlueprintViewProps> = ({
       return;
     }
 
+    if (!settings.geminiApiKey.trim()) {
+      updateLesson({ stage3Approved: true });
+      setPromptModalTarget('stage4-all');
+      return;
+    }
+
     setLoadingTarget('stage4');
     setError(null);
     try {
-      let generatedSlides: SlideData[];
-      if (settings.geminiApiKey.trim()) {
-        generatedSlides = await runStage4SlidesGeneration(
-          settings.geminiApiKey,
-          settings.geminiModel,
-          sequence,
-          lesson
-        );
-      } else {
-        // Offline / no-key structured scaffolding from the approved blueprint
-        generatedSlides = buildLocalFallbackSlides(lesson.slidesBlueprint);
-      }
+      const generatedSlides = await runStage4SlidesGeneration(
+        settings.geminiApiKey,
+        settings.geminiModel,
+        sequence,
+        lesson
+      );
       updateLesson({
         stage3Approved: true,
         slidesData: generatedSlides,
@@ -307,7 +300,7 @@ export const Stage3BlueprintView: React.FC<Stage3BlueprintViewProps> = ({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900">
-              Stage 3 of 4 • Slide Blueprint & 85% Timing Budget
+              Stage 3 of 4 • individual slide plan
             </span>
             <h2 className="text-xl font-display font-extrabold text-zinc-900 mt-1.5">
               Lesson {lesson.lessonNumber}: {lesson.title}
@@ -558,31 +551,31 @@ export const Stage3BlueprintView: React.FC<Stage3BlueprintViewProps> = ({
                 </div>
 
                 {/* Content & Pupil Activity */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                  <div className="p-3 rounded-2xl bg-[#FAF6F0] border border-zinc-200/70">
-                    <span className="font-bold uppercase tracking-wider text-[10px] text-zinc-500 block mb-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div className="p-3.5 rounded-2xl bg-[#FAF6F0] border border-zinc-200/70">
+                    <span className="font-bold uppercase tracking-wider text-[10px] text-zinc-500 block mb-1.5">
                       Planned Slide Content
                     </span>
                     <textarea
                       value={bp.contentSummary}
-                      rows={2}
+                      rows={Math.max(4, Math.min(12, Math.ceil((bp.contentSummary || '').length / 55)))}
                       onChange={(e) =>
                         updateSlideBp(bp.id, { contentSummary: e.target.value })
                       }
-                      className="w-full bg-transparent text-zinc-800 resize-none focus:outline-none"
+                      className="w-full min-h-[110px] bg-transparent text-zinc-800 text-sm leading-relaxed resize-y focus:outline-none"
                     />
                   </div>
-                  <div className="p-3 rounded-2xl bg-[#FAF6F0] border border-zinc-200/70">
-                    <span className="font-bold uppercase tracking-wider text-[10px] text-zinc-500 block mb-1">
+                  <div className="p-3.5 rounded-2xl bg-[#FAF6F0] border border-zinc-200/70">
+                    <span className="font-bold uppercase tracking-wider text-[10px] text-zinc-500 block mb-1.5">
                       What Pupils Are Doing
                     </span>
                     <textarea
                       value={bp.pupilActivity}
-                      rows={2}
+                      rows={Math.max(4, Math.min(12, Math.ceil((bp.pupilActivity || '').length / 55)))}
                       onChange={(e) =>
                         updateSlideBp(bp.id, { pupilActivity: e.target.value })
                       }
-                      className="w-full bg-transparent text-zinc-800 resize-none focus:outline-none"
+                      className="w-full min-h-[110px] bg-transparent text-zinc-800 text-sm leading-relaxed resize-y focus:outline-none"
                     />
                   </div>
                 </div>
@@ -703,12 +696,26 @@ export const Stage3BlueprintView: React.FC<Stage3BlueprintViewProps> = ({
             </p>
             <p className="text-xs text-zinc-600 mt-0.5">
               {settings.geminiApiKey.trim()
-                ? 'Uses your Gemini API key with full sequence context to populate every slide.'
-                : 'No Gemini key entered yet — build editable template slides, or use Copy Stage 4 Prompt to generate full content with any free AI chat.'}
+                ? 'Uses your Gemini API key with full sequence context to write clean pupil-facing slides.'
+                : 'No Gemini key set — clicking Approve opens the Copy Prompt / Paste AI modal so your LLM generates clean pupil-facing slides (never raw teacher notes).'}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            {!settings.geminiApiKey.trim() && (
+              <button
+                type="button"
+                onClick={() => {
+                  const blanks = buildLocalFallbackSlides(lesson.slidesBlueprint);
+                  updateLesson({ stage3Approved: true, slidesData: blanks });
+                  onOpenStage4Studio(lesson.id);
+                }}
+                className="px-3.5 py-2.5 rounded-xl border border-zinc-300 bg-white text-zinc-600 text-xs font-semibold hover:bg-zinc-100 transition"
+                title="Open blank editable slide frames without running Stage 4 AI"
+              >
+                Blank Frames Only
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setPromptModalTarget('stage4-all')}

@@ -390,6 +390,18 @@ export function parseStage3BlueprintResponse(rawText: string): SlideBlueprint[] 
   }));
 }
 
+const GENERIC_HEADINGS_REGEX = /^(?:key concept|core concept|concept|activity focus|pupil activity|teacher explanation|explanation|summary|overview|main point|lesson content|key takeaway|key idea)[:.\s]*$/i;
+
+function cleanStarterQuestionPrefix(q: string): string {
+  return (q || '')
+    .replace(
+      /^(?:from\s+(?:your\s+)?(?:previous|prior)\s+unit(?:\s+on\s+[^:]+)?|from\s+ks[1-5][^:]*|prior\s+unit|lesson\s+\d+|last\s+(?:lesson|week))\s*[:\-—]\s*/i,
+      ''
+    )
+    .replace(/^([a-z])/, (m) => m.toUpperCase())
+    .trim();
+}
+
 export function parseStage4SlidesResponse(
   rawText: string,
   lesson: PlannedLesson,
@@ -409,6 +421,7 @@ export function parseStage4SlidesResponse(
       lesson.slidesBlueprint.find((b) => b.slideNumber === s.slideNumber) ||
       lesson.slidesBlueprint[idx];
     const presetId = s.presetId || bp?.presetId || 'split-concept-dual-code';
+    const phase = s.phase || bp?.phase || 'explanation';
     const preset = SLIDE_PRESETS.find((p) => p.id === presetId);
     const waveVariant =
       s.waveVariant ||
@@ -419,22 +432,48 @@ export function parseStage4SlidesResponse(
         ? 'vertical-scurve-right'
         : 'corner-cavern-tr');
 
+    const cleanedBlocks = (s.bodyBlocks || []).map((b) => ({
+      ...b,
+      heading:
+        b.heading && !GENERIC_HEADINGS_REGEX.test(b.heading.trim())
+          ? b.heading
+          : '',
+    }));
+
+    const cleanedQuads = s.starterQuadrants?.map((q, qIdx) => ({
+      ...q,
+      label: String(qIdx + 1),
+      question: cleanStarterQuestionPrefix(q.question),
+    }));
+
+    const palette = PHASE_PALETTES[phase];
+    const safeCustomLayers = s.customWaveLayers?.map((layer, lIdx) => ({
+      ...layer,
+      id: layer.id || `cw-${lIdx}`,
+      color: layer.color || palette.layers[lIdx % palette.layers.length],
+    }));
+
     return {
       id: targetSlideId && idx === 0 ? targetSlideId : s.id || `slide-${Date.now()}-${idx + 1}`,
       blueprintId: bp?.id || s.blueprintId || `bp-${idx + 1}`,
-      slideNumber: s.slideNumber || bp?.slideNumber || idx + 1,
-      phase: s.phase || bp?.phase || 'explanation',
+      slideNumber: targetSlideId ? s.slideNumber || bp?.slideNumber || idx + 1 : idx + 1,
+      phase,
       presetId,
       waveVariant,
+      invertWaveLayers: s.invertWaveLayers,
       title: s.title || bp?.title || `Slide ${idx + 1}`,
       lessonDate: s.lessonDate,
       bigQuestion: s.bigQuestion,
-      bodyBlocks: s.bodyBlocks || [],
-      starterQuadrants: s.starterQuadrants,
+      bodyBlocks: cleanedBlocks,
+      starterQuadrants: cleanedQuads,
       keyTermsStrip: s.keyTermsStrip,
+      mediaItem: s.mediaItem,
+      customCanvasElements: s.customCanvasElements,
+      customWaveLayers: safeCustomLayers,
       routineIcons: s.routineIcons || bp?.routineIcons || ['write-in-books'],
       timerSeconds: s.timerSeconds,
       speakerNotes: s.speakerNotes || '',
+      teacherDesignNote: s.teacherDesignNote,
       pedagogicalBadges: bp?.pedagogicalRationale,
     };
   });

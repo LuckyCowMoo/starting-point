@@ -62,3 +62,33 @@
 .animate-reveal-pop {
   animation: subtlePop 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+@keyframes timerDrumIn {
+  0% {
+    opacity: 0.25;
+    transform: perspective(180px) translateY(-105%) rotateX(68deg);
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(180px) translateY(0%) rotateX(0deg);
+  }
+}
+
+@keyframes timerDrumOut {
+  0% {
+    opacity: 1;
+    transform: perspective(180px) translateY(0%) rotateX(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: perspective(180px) translateY(105%) rotateX(-68deg);
+  }
+}
+
+.animate-timer-drum-in {
+  animation: timerDrumIn 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-timer-drum-out {
+  animation: timerDrumOut 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}

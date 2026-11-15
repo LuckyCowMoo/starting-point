@@ -8,6 +8,50 @@ interface SlideTimerWidgetProps {
   compact?: boolean;
 }
 
+interface RollingDigitProps {
+  char: string;
+}
+
+const RollingDigit: React.FC<RollingDigitProps> = ({ char }) => {
+  const [current, setCurrent] = useState(char);
+  const [previous, setPrevious] = useState<string | null>(null);
+  const [rollId, setRollId] = useState(0);
+
+  useEffect(() => {
+    if (char !== current) {
+      setPrevious(current);
+      setCurrent(char);
+      setRollId((n) => n + 1);
+    }
+  }, [char, current]);
+
+  if (char === ':') {
+    return <span className="inline-block px-0.5 leading-none opacity-80">:</span>;
+  }
+
+  return (
+    <span className="relative inline-flex items-center justify-center w-[0.72em] h-[1.24em] overflow-hidden rounded-lg bg-zinc-900/5 border border-zinc-300/60 mx-[1px]">
+      {previous !== null && (
+        <span
+          key={`out-${rollId}`}
+          aria-hidden="true"
+          className="absolute inset-0 flex items-center justify-center leading-none animate-timer-drum-out"
+        >
+          {previous}
+        </span>
+      )}
+      <span
+        key={`in-${rollId}`}
+        className={`flex items-center justify-center leading-none ${
+          rollId > 0 ? 'animate-timer-drum-in' : ''
+        }`}
+      >
+        {current}
+      </span>
+    </span>
+  );
+};
+
 export const SlideTimerWidget: React.FC<SlideTimerWidgetProps> = ({
   initialSeconds,
   accentColor,
@@ -79,7 +123,11 @@ export const SlideTimerWidget: React.FC<SlideTimerWidgetProps> = ({
         style={{ borderColor: accentColor, color: '#18181B' }}
       >
         <Timer size={24} style={{ color: accentColor }} />
-        <span>{formatted}</span>
+        <span className="inline-flex items-center">
+          {formatted.split('').map((ch, idx) => (
+            <RollingDigit key={idx} char={ch} />
+          ))}
+        </span>
       </div>
     );
   }
@@ -87,7 +135,7 @@ export const SlideTimerWidget: React.FC<SlideTimerWidgetProps> = ({
   return (
     <div
       onClick={(e) => e.stopPropagation()}
-      className="flex flex-col gap-2 bg-white/95 backdrop-blur-md rounded-2xl px-5 py-3 shadow-xl border-2 min-w-[270px]"
+      className="flex flex-col gap-2 bg-white/95 backdrop-blur-md rounded-2xl px-5 py-3 shadow-xl border-2 min-w-[285px]"
       style={{ borderColor: remaining === 0 ? '#E11D48' : accentColor }}
     >
       <div className="flex items-center justify-between gap-4">
@@ -97,11 +145,13 @@ export const SlideTimerWidget: React.FC<SlideTimerWidgetProps> = ({
             style={{ color: remaining === 0 ? '#E11D48' : accentColor }}
           />
           <span
-            className={`font-mono font-extrabold text-4xl tracking-tight ${
+            className={`inline-flex items-center font-mono font-extrabold text-4xl tracking-tight ${
               remaining === 0 ? 'text-rose-600 animate-pulse' : 'text-zinc-900'
             }`}
           >
-            {formatted}
+            {formatted.split('').map((ch, idx) => (
+              <RollingDigit key={idx} char={ch} />
+            ))}
           </span>
         </div>
 

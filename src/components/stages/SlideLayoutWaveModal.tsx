@@ -191,6 +191,18 @@ export function buildDummySlideForPreview(
             '• Duis aute irure dolor in velit\n• Excepteur sint occaecat cupidatat\n• Mollit anim id est laborum',
         },
       ],
+      mediaItem: sampleSvg
+        ? {
+            id: 'prev-cmp',
+            type: 'svg-diagram',
+            svgCode: sampleSvg.svgCode,
+            title: sampleSvg.title,
+            attribution: 'Comparison Visual',
+            cropFit: 'contain',
+            frameShape: 'rounded-card',
+            placement: 'boxed-card',
+          }
+        : undefined,
     };
   }
 
@@ -224,6 +236,107 @@ export function buildDummySlideForPreview(
           content: 'Duis aute irure dolor in voluptate velit.',
         },
       ],
+      mediaItem: sampleSvg
+        ? {
+            id: 'prev-proc',
+            type: 'svg-diagram',
+            svgCode: sampleSvg.svgCode,
+            title: sampleSvg.title,
+            attribution: 'Process Strip Visual',
+            cropFit: 'contain',
+            frameShape: 'rounded-card',
+            placement: 'boxed-card',
+          }
+        : undefined,
+    };
+  }
+
+  if (presetId === 'vocab-words-only') {
+    return {
+      ...base,
+      title: 'Key Vocabulary Words',
+      bodyBlocks: [
+        { id: 'vw-1', content: '', dualCodeIcon: 'data' },
+        { id: 'vw-2', content: '', dualCodeIcon: 'process' },
+        { id: 'vw-3', content: '', dualCodeIcon: 'layers' },
+        { id: 'vw-4', content: '', dualCodeIcon: 'network' },
+      ],
+      keyTermsStrip: [
+        { term: 'Lorem Ipsum', definition: '' },
+        { term: 'Consectetur', definition: '' },
+        { term: 'Adipiscing', definition: '' },
+        { term: 'Exercitation', definition: '' },
+      ],
+      mediaItem: sampleSvg
+        ? {
+            id: 'prev-vw',
+            type: 'svg-diagram',
+            svgCode: sampleSvg.svgCode,
+            title: sampleSvg.title,
+            attribution: 'Vocabulary Visual',
+            cropFit: 'contain',
+            frameShape: 'rounded-card',
+            placement: 'boxed-card',
+          }
+        : undefined,
+    };
+  }
+
+  if (presetId === 'vocab-single-term-focus') {
+    return {
+      ...base,
+      title: 'Key Term Definition',
+      bodyBlocks: [
+        { id: 'vst-1', content: '', dualCodeIcon: 'concept' },
+      ],
+      keyTermsStrip: [
+        {
+          term: 'Lorem Ipsum',
+          definition:
+            'A clear two-sentence classroom definition pupils write down after discussing the topic together.',
+        },
+      ],
+      mediaItem: sampleSvg
+        ? {
+            id: 'prev-vst',
+            type: 'svg-diagram',
+            svgCode: sampleSvg.svgCode,
+            title: sampleSvg.title,
+            attribution: 'Term Visual',
+            cropFit: 'contain',
+            frameShape: 'rounded-card',
+            placement: 'boxed-card',
+          }
+        : undefined,
+    };
+  }
+
+  if (presetId === 'vocabulary-spotlight') {
+    return {
+      ...base,
+      title: 'Key Vocabulary & Definitions',
+      bodyBlocks: [
+        { id: 'vs-1', content: '', dualCodeIcon: 'data' },
+        { id: 'vs-2', content: '', dualCodeIcon: 'process' },
+        { id: 'vs-3', content: '', dualCodeIcon: 'network' },
+      ],
+      keyTermsStrip: [
+        { term: 'Lorem Ipsum', definition: 'Dolor sit amet consectetur adipiscing.' },
+        { term: 'Consectetur', definition: 'Tempor incididunt ut labore et dolore.' },
+        { term: 'Adipiscing', definition: 'Ut enim ad minim veniam quis nostrud.' },
+      ],
+      mediaItem: sampleSvg
+        ? {
+            id: 'prev-vs',
+            type: 'svg-diagram',
+            svgCode: sampleSvg.svgCode,
+            title: sampleSvg.title,
+            attribution: 'Vocabulary Visual',
+            cropFit: 'contain',
+            frameShape: 'rounded-card',
+            placement: 'boxed-card',
+          }
+        : undefined,
     };
   }
 

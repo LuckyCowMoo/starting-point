@@ -17,15 +17,17 @@ export type RoutineIconType =
   | 'silent-think';
 
 export type SlidePresetId =
+  | 'mwb-starter-quadrant'
   | 'lesson-title-page'
   | 'title-divider'
-  | 'mwb-starter-quadrant'
   | 'split-concept-dual-code'
   | 'worked-example-steps'
   | 'hinge-check-mwb'
   | 'comparison-two-column'
   | 'process-timeline-flow'
   | 'active-task-scaffolds'
+  | 'vocab-words-only'
+  | 'vocab-single-term-focus'
   | 'vocabulary-spotlight'
   | 'plenary-synthesis'
   | 'custom';
@@ -119,7 +121,7 @@ export interface SlideTextBlock {
   id: string;
   heading?: string;
   content: string;
-  style?: 'card' | 'highlight' | 'step' | 'code' | 'list-item' | 'challenge';
+  style?: 'plain' | 'card' | 'highlight' | 'step' | 'code' | 'list-item' | 'challenge';
   layer?: 'top' | 'bottom';
   routineIcon?: RoutineIconType;
   dualCodeIcon?: DualCodeIconId;
@@ -206,6 +208,7 @@ export interface SlideData {
   waveControlPoints?: { x: number; y: number }[];
   timerSeconds?: number;
   speakerNotes: string;
+  teacherDesignNote?: string;
   pedagogicalBadges?: PedagogicalRationale;
 }
 

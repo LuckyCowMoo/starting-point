@@ -83,7 +83,6 @@ export function isSlideRegionDark(
   if (region === 'header') {
     if (
       waveVariant === 'top-bottom-strata' ||
-      waveVariant === 'framed-halo' ||
       waveVariant === 'dark-canvas-bottom-paper' ||
       waveVariant === 'dark-halo-spotlight'
     ) {
@@ -300,10 +299,10 @@ export function estimateSlideObstacles(slide: SlideData): ObstacleBox[] {
 
   if (slide.waveVariant === 'framed-halo') {
     boxes.push({
-      x: 165,
-      y: 130,
-      w: 1590,
-      h: 805,
+      x: 195,
+      y: 74,
+      w: 1530,
+      h: 920,
       layer: 'top',
     });
     return boxes;
@@ -409,7 +408,10 @@ export function estimateSlideObstacles(slide: SlideData): ObstacleBox[] {
     Boolean(slide.mediaItem) && slide.mediaItem?.placement === 'fill-bottom-layer';
   const isDualVisualPreset =
     slide.presetId === 'split-concept-dual-code' ||
-    slide.presetId === 'worked-example-steps';
+    slide.presetId === 'worked-example-steps' ||
+    slide.presetId === 'vocab-words-only' ||
+    slide.presetId === 'vocab-single-term-focus' ||
+    slide.presetId === 'vocabulary-spotlight';
 
   const topBlocks = slide.bodyBlocks.filter((b) => b.layer !== 'bottom');
   const bottomBlocks = slide.bodyBlocks.filter((b) => b.layer === 'bottom');
@@ -546,8 +548,8 @@ export function computeConformingPaperCut(
     const hasCustomPts = customControlPoints && customControlPoints.length === N;
     const botPts: Point[] = hasCustomPts
       ? customControlPoints.map((p) => ({
-          x: clamp(p.x, 0, 1920),
-          y: clamp(p.y, 700, 1045),
+          x: clamp(p.x, -160, 2080),
+          y: clamp(p.y, 180, 1240),
         }))
       : xStations.map((x, i) => ({ x, y: autoBotBound[i] }));
 
@@ -560,7 +562,9 @@ export function computeConformingPaperCut(
     const mkBotPoints = (dy: number, phaseShift: number): Point[] =>
       botPts.map((pt, i) => ({
         x: pt.x,
-        y: clamp(pt.y + dy + Math.cos(i * 0.95 + phaseShift) * 9, 700, 1068),
+        y: hasCustomPts
+          ? clamp(pt.y + dy + Math.cos(i * 0.95 + phaseShift) * 9, -220, 1300)
+          : clamp(pt.y + dy + Math.cos(i * 0.95 + phaseShift) * 9, 700, 1068),
       }));
 
     const topWave3 = mkTopPoints(58, 0.3);
@@ -607,7 +611,7 @@ export function computeConformingPaperCut(
         },
         {
           id: 'bot-w3',
-          d: `${smoothSplineSegment(botWave3)} L 1920 0 L 0 0 Z`,
+          d: `${smoothSplineSegment(botWave3)} L 2180 -260 L -260 -260 Z`,
           color: w3Color,
           shadowOffsetX: 0,
           shadowOffsetY: 10,
@@ -615,7 +619,7 @@ export function computeConformingPaperCut(
         },
         {
           id: 'bot-w2',
-          d: `${smoothSplineSegment(botWave2)} L 1920 0 L 0 0 Z`,
+          d: `${smoothSplineSegment(botWave2)} L 2180 -260 L -260 -260 Z`,
           color: w2Color,
           shadowOffsetX: 0,
           shadowOffsetY: 10,
@@ -623,7 +627,7 @@ export function computeConformingPaperCut(
         },
         {
           id: 'bot-w1',
-          d: `${smoothSplineSegment(botWave1)} L 1920 0 L 0 0 Z`,
+          d: `${smoothSplineSegment(botWave1)} L 2180 -260 L -260 -260 Z`,
           color: w1Color,
           shadowOffsetX: 0,
           shadowOffsetY: 12,
@@ -645,26 +649,26 @@ export function computeConformingPaperCut(
   if (variant === 'framed-halo' || variant === 'dark-halo-spotlight') {
     const isSpotlight = variant === 'dark-halo-spotlight';
     const topBoxes = obstacles.filter((b) => b.layer === 'top');
-    const minX = topBoxes.length
-      ? Math.max(isSpotlight ? 185 : 95, Math.min(...topBoxes.map((b) => b.x)) - (isSpotlight ? 35 : 50))
-      : isSpotlight
-      ? 230
-      : 135;
-    const maxX = topBoxes.length
-      ? Math.min(isSpotlight ? 1735 : 1825, Math.max(...topBoxes.map((b) => b.x + b.w)) + (isSpotlight ? 35 : 50))
-      : isSpotlight
-      ? 1690
-      : 1785;
-    const minY = topBoxes.length
-      ? Math.max(isSpotlight ? 145 : 70, Math.min(...topBoxes.map((b) => b.y)) - (isSpotlight ? 25 : 40))
-      : isSpotlight
-      ? 175
-      : 105;
-    const maxY = topBoxes.length
-      ? Math.min(isSpotlight ? 950 : 1015, Math.max(...topBoxes.map((b) => b.y + b.h)) + (isSpotlight ? 25 : 40))
-      : isSpotlight
-      ? 925
-      : 970;
+    const minX = isSpotlight
+      ? topBoxes.length
+        ? Math.max(150, Math.min(...topBoxes.map((b) => b.x)) - 40)
+        : 210
+      : 54;
+    const maxX = isSpotlight
+      ? topBoxes.length
+        ? Math.min(1770, Math.max(...topBoxes.map((b) => b.x + b.w)) + 40)
+        : 1710
+      : 1866;
+    const minY = isSpotlight
+      ? topBoxes.length
+        ? Math.max(135, Math.min(...topBoxes.map((b) => b.y)) - 30)
+        : 165
+      : 24;
+    const maxY = isSpotlight
+      ? topBoxes.length
+        ? Math.min(960, Math.max(...topBoxes.map((b) => b.y + b.h)) + 30)
+        : 935
+      : 1056;
 
     const rx = (maxX - minX) / 2;
     const ry = (maxY - minY) / 2;
@@ -676,22 +680,26 @@ export function computeConformingPaperCut(
       const theta = (i / LOOP_PTS) * Math.PI * 2;
       const cosT = Math.cos(theta);
       const sinT = Math.sin(theta);
-      // Superellipse n=4 + subtle organic ripple keeps corners sweeping and round while enclosing rectangular cards
-      const superR = Math.pow(Math.pow(Math.abs(cosT), 3.6) + Math.pow(Math.abs(sinT), 3.6), -1 / 3.6);
-      const ripple = 1 + 0.024 * Math.sin(i * 1.9);
+      // Superellipse n=6.8 keeps corners organically curved while staying clear of the slide header & timer
+      const exponent = isSpotlight ? 3.8 : 6.8;
+      const superR = Math.pow(
+        Math.pow(Math.abs(cosT), exponent) + Math.pow(Math.abs(sinT), exponent),
+        -1 / exponent
+      );
+      const ripple = 1 + (isSpotlight ? 0.022 : 0.008) * Math.sin(i * 1.9);
       return {
-        x: clamp(centerX + cosT * superR * rx * ripple, 20, 1900),
-        y: clamp(centerY + sinT * superR * ry * ripple, 20, 1060),
+        x: clamp(centerX + cosT * superR * rx * ripple, 18, 1902),
+        y: clamp(centerY + sinT * superR * ry * ripple, 16, 1064),
       };
     });
 
-    const baseLoop =
-      customControlPoints && customControlPoints.length >= 8
-        ? customControlPoints.map((p) => ({
-            x: clamp(p.x, 15, 1905),
-            y: clamp(p.y, 15, 1065),
-          }))
-        : defaultLoopPts;
+    const hasCustomPts = Boolean(customControlPoints && customControlPoints.length >= 8);
+    const baseLoop = hasCustomPts
+      ? customControlPoints!.map((p) => ({
+          x: clamp(p.x, -160, 2080),
+          y: clamp(p.y, -160, 1240),
+        }))
+      : defaultLoopPts;
 
     const cx = baseLoop.reduce((s, p) => s + p.x, 0) / baseLoop.length;
     const cy = baseLoop.reduce((s, p) => s + p.y, 0) / baseLoop.length;
@@ -701,16 +709,17 @@ export function computeConformingPaperCut(
         const dx = p.x - cx;
         const dy = p.y - cy;
         const len = Math.hypot(dx, dy) || 1;
-        const waveJitter = inset === 0 ? 0 : Math.sin(i * 1.45 + phaseShift) * 14;
-        return {
-          x: clamp(p.x + (dx / len) * (inset + waveJitter), 8, 1912),
-          y: clamp(p.y + (dy / len) * (inset + waveJitter), 8, 1072),
-        };
+        const waveJitter = inset === 0 ? 0 : Math.sin(i * 1.45 + phaseShift) * 10;
+        const nx = p.x + (dx / len) * (inset + waveJitter);
+        const ny = p.y + (dy / len) * (inset + waveJitter);
+        return hasCustomPts
+          ? { x: clamp(nx, -260, 2180), y: clamp(ny, -260, 1340) }
+          : { x: clamp(nx, -40, 1960), y: clamp(ny, -40, 1120) };
       });
       return smoothClosedSpline(scaled);
     };
 
-    const insetScale = isSpotlight ? 1.45 : 1.0;
+    const insetScale = isSpotlight ? 1.55 : 0.62;
 
     return {
       bottomBaseColor: baseFill,
@@ -763,17 +772,19 @@ export function computeConformingPaperCut(
     const hasCustomPts = customControlPoints && customControlPoints.length === N;
     const pts: Point[] = hasCustomPts
       ? customControlPoints.map((p) => ({
-          x: clamp(p.x, 90, 1800),
-          y: clamp(p.y, 0, 1080),
+          x: clamp(p.x, -160, 2080),
+          y: clamp(p.y, -160, 1240),
         }))
       : yStations.map((y, i) => ({ x: autoBoundX[i], y }));
 
     const mkWave = (dx: number, phase: number) => {
       const wPts = pts.map((p, i) => ({
-        x: clamp(p.x - dx - (dx === 0 ? 0 : Math.sin(i * 0.95 + phase) * 18), 15, 1860),
+        x: hasCustomPts
+          ? clamp(p.x - dx - (dx === 0 ? 0 : Math.sin(i * 0.95 + phase) * 18), -260, 2180)
+          : clamp(p.x - dx - (dx === 0 ? 0 : Math.sin(i * 0.95 + phase) * 18), 15, 1860),
         y: p.y,
       }));
-      return `${smoothSplineSegment(wPts)} L 1920 1080 L 1920 0 Z`;
+      return `${smoothSplineSegment(wPts)} L 2180 1340 L 2180 -260 Z`;
     };
 
     return {
@@ -827,17 +838,19 @@ export function computeConformingPaperCut(
     const hasCustomPts = customControlPoints && customControlPoints.length === N;
     const pts: Point[] = hasCustomPts
       ? customControlPoints.map((p) => ({
-          x: clamp(p.x, 0, 1920),
-          y: clamp(p.y, 680, 1060),
+          x: clamp(p.x, -160, 2080),
+          y: clamp(p.y, -160, 1240),
         }))
       : xStations.map((x, i) => ({ x, y: autoBoundY[i] }));
 
     const mkBottomSheetWave = (dy: number, phase: number) => {
       const wPts = pts.map((p, i) => ({
         x: p.x,
-        y: clamp(p.y - dy + (dy === 0 ? 0 : Math.sin(i * 1.05 + phase) * 14), 680, 1060),
+        y: hasCustomPts
+          ? clamp(p.y - dy + (dy === 0 ? 0 : Math.sin(i * 1.05 + phase) * 14), -260, 1340)
+          : clamp(p.y - dy + (dy === 0 ? 0 : Math.sin(i * 1.05 + phase) * 14), 680, 1060),
       }));
-      return `${smoothSplineSegment(wPts)} L 1920 1080 L 0 1080 Z`;
+      return `${smoothSplineSegment(wPts)} L 2180 1340 L -260 1340 Z`;
     };
 
     const avgY = pts.reduce((a, b) => a + b.y, 0) / pts.length;
@@ -909,21 +922,23 @@ export function computeConformingPaperCut(
     const hasCustomPts = customControlPoints && customControlPoints.length === N;
     const pts: Point[] = hasCustomPts
       ? customControlPoints.map((p) => ({
-          x: clamp(p.x, 0, 1920),
-          y: clamp(p.y, 45, 1065),
+          x: clamp(p.x, -160, 2080),
+          y: clamp(p.y, -160, 1240),
         }))
       : xStations.map((x, i) => ({ x, y: autoBoundY[i] }));
 
     const mkWave = (dy: number, phase: number) => {
       const wPts = pts.map((p, i) => ({
         x: p.x,
-        y: clamp(
-          p.y + dy + (dy === 0 ? 0 : Math.sin(i * 1.0 + phase) * 16),
-          35,
-          1072
-        ),
+        y: hasCustomPts
+          ? clamp(p.y + dy + (dy === 0 ? 0 : Math.sin(i * 1.0 + phase) * 16), -260, 1340)
+          : clamp(
+              p.y + dy + (dy === 0 ? 0 : Math.sin(i * 1.0 + phase) * 16),
+              35,
+              1072
+            ),
       }));
-      return `${smoothSplineSegment(wPts)} L 1920 0 L 0 0 Z`;
+      return `${smoothSplineSegment(wPts)} L 2180 -260 L -260 -260 Z`;
     };
 
     const avgY = pts.reduce((a, b) => a + b.y, 0) / pts.length;
@@ -998,21 +1013,23 @@ export function computeConformingPaperCut(
   const hasCustomPts = customControlPoints && customControlPoints.length === N;
   const pts: Point[] = hasCustomPts
     ? customControlPoints.map((p) => ({
-        x: clamp(p.x, 120, 1895),
-        y: clamp(p.y, 0, 1080),
+        x: clamp(p.x, -160, 2080),
+        y: clamp(p.y, -160, 1240),
       }))
     : yStations.map((y, i) => ({ x: autoBoundX[i], y }));
 
   const mkRightWave = (dx: number, phase: number) => {
     const wPts = pts.map((p, i) => ({
-      x: clamp(
-        p.x + dx + (dx === 0 ? 0 : Math.sin(i * 1.0 + phase) * 18),
-        120,
-        1908
-      ),
+      x: hasCustomPts
+        ? clamp(p.x + dx + (dx === 0 ? 0 : Math.sin(i * 1.0 + phase) * 18), -260, 2180)
+        : clamp(
+            p.x + dx + (dx === 0 ? 0 : Math.sin(i * 1.0 + phase) * 18),
+            120,
+            1908
+          ),
       y: p.y,
     }));
-    return `${smoothSplineSegment(wPts)} L 0 1080 L 0 0 Z`;
+    return `${smoothSplineSegment(wPts)} L -260 1340 L -260 -260 Z`;
   };
 
   const minRightCavernX = Math.min(...pts.map((p) => p.x));

@@ -485,7 +485,64 @@ export async function generateLessonPptxBlob(
       const count = Math.max(1, slide.bodyBlocks.length);
       const blockH = Math.min(1.65, 5.1 / count);
 
-      if (slide.presetId === 'comparison-two-column') {
+      // 3b. Vocabulary Presets (Words Only / Single Term / Full Glossary)
+      if (
+        (slide.presetId === 'vocab-words-only' ||
+          slide.presetId === 'vocab-single-term-focus' ||
+          slide.presetId === 'vocabulary-spotlight') &&
+        (slide.keyTermsStrip?.length || slide.bodyBlocks.length)
+      ) {
+        const vocabItems = slide.keyTermsStrip?.length
+          ? slide.keyTermsStrip
+          : slide.bodyBlocks.map((b) => ({
+              term: b.heading || 'Key Term',
+              definition: b.content,
+            }));
+
+        if (slide.presetId === 'vocab-single-term-focus' && vocabItems[0]) {
+          const item = vocabItems[0];
+          pptSlide.addShape(pptx.ShapeType.roundRect, {
+            x: 0.65,
+            y: 1.6,
+            w: 6.1,
+            h: 4.5,
+            fill: { color: 'FAF6F0', transparency: 3 },
+            line: { color: palette.accent.replace('#', ''), width: 2 },
+            rectRadius: 0.16,
+          });
+          pptSlide.addText(
+            [
+              { text: `${item.term}\n\n`, options: { bold: true, fontSize: 26, color: palette.accent.replace('#', '') } },
+              { text: item.definition, options: { fontSize: 17, color: '18181B' } },
+            ],
+            { x: 0.9, y: 1.85, w: 5.6, h: 4.0, valign: 'top' }
+          );
+        } else {
+          const isWordsOnly = slide.presetId === 'vocab-words-only';
+          vocabItems.slice(0, 6).forEach((vt, idx) => {
+            const rowH = vocabItems.length >= 5 ? 0.88 : 1.1;
+            const yPos = 1.45 + idx * (rowH + 0.12);
+            pptSlide.addShape(pptx.ShapeType.roundRect, {
+              x: 0.65,
+              y: yPos,
+              w: 6.1,
+              h: rowH,
+              fill: { color: 'FAF6F0', transparency: 3 },
+              line: { color: palette.borderAccent.replace('#', ''), width: 1.2 },
+              rectRadius: 0.12,
+            });
+            pptSlide.addText(
+              isWordsOnly
+                ? `${vt.term}\n_______________________________________`
+                : [
+                    { text: `${vt.term}: `, options: { bold: true, fontSize: 14, color: palette.accent.replace('#', '') } },
+                    { text: vt.definition, options: { fontSize: 13, color: '27272A' } },
+                  ],
+              { x: 0.85, y: yPos + 0.08, w: 5.7, h: rowH - 0.16, valign: 'middle' }
+            );
+          });
+        }
+      } else if (slide.presetId === 'comparison-two-column') {
         const half = Math.ceil(slide.bodyBlocks.length / 2);
         const colA = slide.bodyBlocks.slice(0, half);
         const colB = slide.bodyBlocks.slice(half);
@@ -543,8 +600,9 @@ export async function generateLessonPptxBlob(
             slide.waveVariant === 'dark-canvas-left-paper'
               ? 9.4
               : blockAreaW;
+          const isPlainBlock = b.style === 'plain';
           const isDarkSurface = isBlockOnDark(b.layer);
-          if (!isDarkSurface) {
+          if (!isDarkSurface && !isPlainBlock) {
             pptSlide.addShape(pptx.ShapeType.roundRect, {
               x: startX,
               y: yPos,

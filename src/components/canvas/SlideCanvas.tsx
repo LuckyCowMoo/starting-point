@@ -85,6 +85,38 @@ export function isMcOptionCorrect(
   return Boolean(cleanOpt && (cleanAns === cleanOpt || cleanAns.includes(cleanOpt)));
 }
 
+export function stripStarterMetaPrefix(question: string): string {
+  return (question || '')
+    .replace(
+      /^(?:from\s+(?:your\s+)?(?:previous|prior)\s+unit(?:\s+on\s+[^:]+)?|from\s+ks[1-5][^:]*|prior\s+unit|lesson\s+\d+|last\s+(?:lesson|week))\s*[:\-—]\s*/i,
+      ''
+    )
+    .replace(/^([a-z])/, (m) => m.toUpperCase())
+    .trim();
+}
+
+const GENERIC_META_HEADINGS = new Set([
+  'key concept',
+  'core concept',
+  'concept',
+  'activity focus',
+  'pupil activity',
+  'teacher explanation',
+  'explanation',
+  'summary',
+  'overview',
+  'main point',
+  'lesson content',
+  'key takeaway',
+  'key idea',
+]);
+
+export function isGenericMetaHeading(heading?: string): boolean {
+  if (!heading) return true;
+  const normalized = heading.trim().toLowerCase().replace(/[:.]+$/, '');
+  return normalized.length === 0 || GENERIC_META_HEADINGS.has(normalized);
+}
+
 interface SlideCanvasProps {
   slide: SlideData;
   isThumbnail?: boolean;
@@ -351,6 +383,9 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   const isStarter = slide.presetId === 'mwb-starter-quadrant';
   const isLeftSpine = slide.waveVariant === 'vertical-scurve-left';
   const isTitlePage = slide.presetId === 'lesson-title-page';
+  const isHaloVariant =
+    slide.waveVariant === 'framed-halo' ||
+    slide.waveVariant === 'dark-halo-spotlight';
 
   // Lesson title page defaults its cover visual to cropped bottom-layer fill inside the wave
   const effectiveMedia: SlideMediaItem | undefined = useMemo(() => {
@@ -373,9 +408,6 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     !hideWaveBackground && isSlideRegionDark(slide.waveVariant, 'top', invert);
   const bottomOnDark =
     !hideWaveBackground && isSlideRegionDark(slide.waveVariant, 'bottom', invert);
-  const cornerOnDark =
-    !hideWaveBackground &&
-    isSlideRegionDark(slide.waveVariant, 'bottom-right-corner', invert);
 
   const slideForWaves = useMemo(
     () => (effectiveMedia !== slide.mediaItem ? { ...slide, mediaItem: effectiveMedia } : slide),
@@ -421,22 +453,23 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     return () => ro.disconnect();
   }, []);
 
-  // Drag handler for SVG wave path control points
+  // Drag handler for SVG wave path control points (allows dragging flush to or beyond slide edges)
   useEffect(() => {
     if (dragIdx === null) return;
+    const snapEdge = (val: number, max: number) => {
+      if (Math.abs(val) <= 14) return 0;
+      if (Math.abs(val - max) <= 14) return max;
+      return val;
+    };
     const onMove = (e: PointerEvent) => {
       const svg = svgOverlayRef.current;
       if (!svg) return;
       const rect = svg.getBoundingClientRect();
       if (!rect.width || !rect.height) return;
-      const canvasX = Math.max(
-        15,
-        Math.min(1905, ((e.clientX - rect.left) / rect.width) * 1920)
-      );
-      const canvasY = Math.max(
-        15,
-        Math.min(1065, ((e.clientY - rect.top) / rect.height) * 1080)
-      );
+      const rawX = ((e.clientX - rect.left) / rect.width) * 1920;
+      const rawY = ((e.clientY - rect.top) / rect.height) * 1080;
+      const canvasX = snapEdge(Math.max(-140, Math.min(2060, rawX)), 1920);
+      const canvasY = snapEdge(Math.max(-140, Math.min(1220, rawY)), 1080);
       setDraggingPts((prev) => {
         const base = prev ?? computedPaper.controlPoints;
         return base.map((p, i) => (i === dragIdx ? { x: canvasX, y: canvasY } : p));
@@ -547,6 +580,26 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   ) => {
     const canPick = Boolean(editable && onOpenMediaPicker && !isThumbnail);
 
+    // In Step 1 Preset Picker (wireframe view), explicitly highlight where intended images live
+    if (hideWaveBackground) {
+      if (!media && !requiredSlotLabel) return null;
+      return (
+        <div
+          className={`${sizeClass} rounded-3xl border-4 border-dashed border-sky-400 bg-sky-50/75 text-sky-900 flex flex-col items-center justify-center p-8 text-center shadow-inner`}
+        >
+          <div className="w-20 h-20 rounded-3xl bg-sky-100 border-2 border-sky-300 text-sky-700 flex items-center justify-center mb-4">
+            <ImagePlus size={44} />
+          </div>
+          <p className="text-[28px] font-extrabold uppercase tracking-wider text-sky-900 leading-tight">
+            {requiredSlotLabel || 'Intended Image Area'}
+          </p>
+          <p className="mt-2 text-[22px] font-semibold text-sky-700">
+            Visual / Diagram Slot
+          </p>
+        </div>
+      );
+    }
+
     if (!media || media.placement === 'fill-bottom-layer') {
       if (!requiredSlotLabel) return null;
 
@@ -559,9 +612,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
             if (canPick) onOpenMediaPicker?.();
           }}
           className={`${sizeClass} rounded-3xl border-4 border-dashed flex flex-col items-center justify-center p-10 text-center transition ${
-            hideWaveBackground
-              ? 'border-slate-300 bg-slate-100/90 text-slate-600'
-              : slotOnDark
+            slotOnDark
               ? canPick
                 ? 'cursor-pointer border-white/70 bg-white/18 hover:bg-white/28 text-white shadow-2xl backdrop-blur-xs'
                 : 'cursor-default border-white/35 bg-white/10 text-white/80'
@@ -572,7 +623,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         >
           <div
             className={`w-24 h-24 rounded-3xl flex items-center justify-center mb-5 shadow-md ${
-              slotOnDark && !hideWaveBackground ? 'bg-white/20' : 'bg-slate-200/80 text-slate-700'
+              slotOnDark ? 'bg-white/20' : 'bg-slate-200/80 text-slate-700'
             }`}
           >
             <ImagePlus size={48} />
@@ -582,7 +633,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           </p>
           {canPick && (
             <p className="mt-3 text-[24px] font-medium opacity-90 max-w-md">
-              Click to search Pexels, Pixabay, Wikimedia Commons, or pick a curriculum SVG diagram
+              Click to choose a photo or diagram
             </p>
           )}
         </button>
@@ -598,30 +649,24 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           }
         }}
         title={canPick ? 'Click to change visual or SVG diagram' : undefined}
-        className={`relative rounded-3xl overflow-hidden shadow-2xl bg-white border-4 border-white/90 flex flex-col group ${sizeClass} ${
+        className={`relative rounded-3xl overflow-hidden shadow-2xl bg-white border-4 border-white/90 flex flex-col ${sizeClass} ${
           canPick ? 'cursor-pointer hover:ring-4 hover:ring-amber-400 transition' : ''
         }`}
       >
         {media.type === 'svg-diagram' && media.svgCode ? (
           <div
-            className="flex-1 flex items-center justify-center p-6 bg-white overflow-hidden"
+            className="flex-1 w-full h-full flex items-center justify-center p-5 bg-white overflow-hidden"
             dangerouslySetInnerHTML={{ __html: media.svgCode }}
           />
         ) : (
           <img
             src={media.url || ''}
             alt={media.title}
-            className={`flex-1 w-full h-full min-h-0 ${
+            className={`w-full h-full ${
               media.cropFit === 'contain' ? 'object-contain bg-white' : 'object-cover'
             }`}
           />
         )}
-        <div className="px-5 py-3 bg-white/95 border-t border-zinc-200 flex items-center justify-between text-[20px] text-zinc-700 font-semibold shrink-0">
-          <span className="truncate">{media.title}</span>
-          <span className="text-[17px] text-zinc-400 shrink-0 ml-3">
-            {canPick ? 'Click to change' : media.attribution}
-          </span>
-        </div>
       </div>
     );
   };
@@ -630,6 +675,54 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     const onDark = b.layer === 'bottom' ? bottomOnDark : topOnDark;
     const textColor = onDark ? '#FFFFFF' : neutralDark;
     const headingColor = onDark ? '#FFFFFF' : neutralAccent;
+    const cleanHeading =
+      b.heading && !isGenericMetaHeading(b.heading) ? b.heading : '';
+    const isPlainBlock =
+      !isTimeline &&
+      (b.style === 'plain' ||
+        (!b.style &&
+          slide.phase === 'explanation' &&
+          slide.presetId !== 'comparison-two-column'));
+
+    if (isPlainBlock) {
+      return (
+        <div key={b.id} className="px-2 py-2 space-y-2.5 transition-all">
+          {(cleanHeading || b.dualCodeIcon || (editable && !isThumbnail)) && (
+            <div className="flex items-center gap-4 min-w-0">
+              <DualCodeBadgeControl
+                iconId={b.dualCodeIcon}
+                accentColor={neutralAccent}
+                onDarkSurface={onDark}
+                editable={editable && !isThumbnail}
+                onChangeIcon={(nextIcon) =>
+                  updateBlock(b.id, { dualCodeIcon: nextIcon })
+                }
+              />
+              {cleanHeading ? (
+                <h3
+                  className="text-[38px] font-extrabold leading-tight flex-1"
+                  style={{ color: headingColor }}
+                >
+                  <InlineEditableText
+                    value={cleanHeading}
+                    editable={editable && !isThumbnail}
+                    onCommit={(next) => updateBlock(b.id, { heading: next })}
+                  />
+                </h3>
+              ) : null}
+            </div>
+          )}
+
+          {renderBulletOrProse(
+            b.content,
+            textColor,
+            'text-[33px]',
+            onDark,
+            (next) => updateBlock(b.id, { content: next })
+          )}
+        </div>
+      );
+    }
 
     return (
       <div
@@ -651,54 +744,56 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               : undefined,
         }}
       >
-        <div className="flex items-start justify-between gap-4 mb-3">
-          <div className="flex items-center gap-4 min-w-0 flex-1">
-            {isTimeline && (
-              <span
-                className="w-12 h-12 rounded-2xl flex items-center justify-center font-extrabold text-[27px] shrink-0"
-                style={{
-                  backgroundColor: onDark ? '#FFFFFF' : neutralAccent,
-                  color: onDark ? palette.layers[3] : '#FFFFFF',
-                }}
-              >
-                {index + 1}
-              </span>
-            )}
-            <DualCodeBadgeControl
-              iconId={b.dualCodeIcon}
-              accentColor={neutralAccent}
-              onDarkSurface={onDark}
-              editable={editable && !isThumbnail}
-              onChangeIcon={(nextIcon) =>
-                updateBlock(b.id, { dualCodeIcon: nextIcon })
-              }
-            />
-            {b.heading ? (
-              <h3
-                className="text-[35px] font-extrabold leading-tight flex-1"
-                style={{ color: headingColor }}
-              >
-                <InlineEditableText
-                  value={b.heading}
-                  editable={editable && !isThumbnail}
-                  onCommit={(next) => updateBlock(b.id, { heading: next })}
-                />
-              </h3>
-            ) : editable && !isThumbnail ? (
-              <h3
-                className="text-[30px] font-bold leading-tight opacity-60"
-                style={{ color: headingColor }}
-              >
-                <InlineEditableText
-                  value=""
-                  placeholder="+ Add heading"
-                  editable={editable}
-                  onCommit={(next) => updateBlock(b.id, { heading: next })}
-                />
-              </h3>
-            ) : null}
+        {(isTimeline || cleanHeading || b.dualCodeIcon) && (
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div className="flex items-center gap-4 min-w-0 flex-1">
+              {isTimeline && (
+                <span
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center font-extrabold text-[27px] shrink-0"
+                  style={{
+                    backgroundColor: onDark ? '#FFFFFF' : neutralAccent,
+                    color: onDark ? palette.layers[3] : '#FFFFFF',
+                  }}
+                >
+                  {index + 1}
+                </span>
+              )}
+              <DualCodeBadgeControl
+                iconId={b.dualCodeIcon}
+                accentColor={neutralAccent}
+                onDarkSurface={onDark}
+                editable={editable && !isThumbnail}
+                onChangeIcon={(nextIcon) =>
+                  updateBlock(b.id, { dualCodeIcon: nextIcon })
+                }
+              />
+              {cleanHeading ? (
+                <h3
+                  className="text-[35px] font-extrabold leading-tight flex-1"
+                  style={{ color: headingColor }}
+                >
+                  <InlineEditableText
+                    value={cleanHeading}
+                    editable={editable && !isThumbnail}
+                    onCommit={(next) => updateBlock(b.id, { heading: next })}
+                  />
+                </h3>
+              ) : editable && !isThumbnail ? (
+                <h3
+                  className="text-[28px] font-bold leading-tight opacity-55"
+                  style={{ color: headingColor }}
+                >
+                  <InlineEditableText
+                    value=""
+                    placeholder="+ Add optional heading"
+                    editable={editable}
+                    onCommit={(next) => updateBlock(b.id, { heading: next })}
+                  />
+                </h3>
+              ) : null}
+            </div>
           </div>
-        </div>
+        )}
 
         {renderBulletOrProse(
           b.content,
@@ -712,16 +807,21 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   };
 
   const renderHeader = () => {
+    const headerPad =
+      slide.waveVariant === 'dark-halo-spotlight'
+        ? 'px-[220px] pt-12'
+        : isHaloVariant
+        ? 'px-[210px] pt-[74px]'
+        : isLeftSpine
+        ? 'pl-[470px] pr-20 pt-9'
+        : 'px-20 pt-9';
+
     return (
-      <div
-        className={`relative z-20 flex items-start justify-between px-20 pt-9 ${
-          isLeftSpine ? 'pl-[470px]' : ''
-        }`}
-      >
-        <div className="max-w-[1220px]">
+      <div className={`relative z-20 flex items-start justify-between ${headerPad}`}>
+        <div className="max-w-[1100px] min-w-0">
           <h1
             className={`font-extrabold tracking-tight leading-[1.08] ${
-              isStarter ? 'text-[50px]' : 'text-[60px]'
+              isStarter ? 'text-[52px]' : 'text-[60px]'
             }`}
             style={{ color: headerOnDark ? '#FFFFFF' : neutralDark }}
           >
@@ -733,7 +833,20 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           </h1>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0 ml-6">
+        <div className="flex items-center gap-4 shrink-0 ml-6">
+          {!isTitlePage && slide.routineIcons && slide.routineIcons.length > 0 && (
+            <div className="flex items-center gap-2.5">
+              {slide.routineIcons.slice(0, 3).map((ri) => (
+                <RoutineBadgeIcon
+                  key={ri}
+                  type={ri}
+                  monochromeCorner
+                  onDark={headerOnDark}
+                />
+              ))}
+            </div>
+          )}
+
           {slide.timerSeconds && slide.timerSeconds > 0 && (
             <SlideTimerWidget
               initialSeconds={slide.timerSeconds}
@@ -852,9 +965,16 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           )}
         </div>
 
-        {/* Right Cover Area: Cropped inside bottom coloured wave by default; clickable to change image */}
+        {/* Right Cover Area: Cropped inside bottom coloured wave by default; wireframe image zone shown in Step 1 picker */}
         <div className="w-[770px] shrink-0 flex items-center justify-center py-4">
-          {isCoverFilledInWave ? (
+          {hideWaveBackground ? (
+            renderMediaFrame(
+              effectiveMedia,
+              'w-full h-[820px]',
+              'Intended Cover Image Area',
+              false
+            )
+          ) : isCoverFilledInWave ? (
             editable && !isThumbnail ? (
               <button
                 type="button"
@@ -871,7 +991,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 </span>
               </button>
             ) : null
-          ) : effectiveMedia && !hideWaveBackground && effectiveMedia.placement === 'boxed-card' ? (
+          ) : effectiveMedia && effectiveMedia.placement === 'boxed-card' ? (
             renderMediaFrame(
               effectiveMedia,
               'w-full h-[820px]',
@@ -892,6 +1012,15 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   };
 
   const renderPresetContent = (p: PhasePalette) => {
+    const contentPad =
+      slide.waveVariant === 'dark-halo-spotlight'
+        ? 'px-[220px] py-8'
+        : isHaloVariant
+        ? 'px-[210px] pt-6 pb-[86px]'
+        : isLeftSpine
+        ? 'pl-[470px] pr-20 py-8'
+        : 'px-20 py-8';
+
     if (isTitlePage) {
       return renderLessonTitlePage(p);
     }
@@ -974,24 +1103,46 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     if (slide.presetId === 'mwb-starter-quadrant') {
       const quads = slide.starterQuadrants || [];
       return (
-        <div className="relative z-20 flex-1 flex flex-col px-20 pt-16 pb-20 min-h-0">
-          <div className="grid grid-cols-2 grid-rows-2 gap-6 flex-1 min-h-0">
+        <div
+          className={`relative z-20 flex-1 flex flex-col pt-6 min-h-0 overflow-hidden ${
+            isHaloVariant
+              ? 'px-[165px] pb-[115px]'
+              : 'px-20 pb-[130px]'
+          }`}
+        >
+          <div className="grid grid-cols-2 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-5 flex-1 min-h-0">
             {quads.slice(0, 4).map((q, idx) => {
               const revealed = editorPreviewAllAnswers || idx < starterRevealedCount;
+              const cleanQuestion = stripStarterMetaPrefix(q.question);
+              const qLen = cleanQuestion.length;
+              const qTextClass =
+                qLen > 125
+                  ? 'text-[23px] leading-[1.18]'
+                  : qLen > 85
+                  ? 'text-[26px] leading-[1.2]'
+                  : 'text-[29px] leading-[1.22]';
               const hasMcOptions = Boolean(q.options && q.options.length > 0);
+              const maxOptLen = hasMcOptions
+                ? Math.max(...q.options!.map((o) => o.length))
+                : 0;
+              const optTextClass =
+                maxOptLen > 34
+                  ? 'text-[20px] leading-tight py-2 px-3.5'
+                  : 'text-[23px] leading-snug py-2.5 px-4';
+
               return (
                 <div
                   key={q.id}
-                  className={`rounded-3xl border-2 px-8 py-6 shadow-md flex flex-col justify-between min-h-0 overflow-hidden ${
+                  className={`rounded-3xl border-2 px-6 py-4 shadow-md flex flex-col justify-between gap-2.5 min-h-0 overflow-hidden ${
                     topOnDark
                       ? 'bg-white/14 backdrop-blur-md border-white/30'
                       : 'bg-white/95'
                   }`}
                   style={topOnDark ? undefined : { borderColor: neutralBorder }}
                 >
-                  <div className="flex items-start gap-4">
+                  <div className="flex items-start gap-3.5 shrink-0">
                     <span
-                      className="w-13 h-13 rounded-2xl flex items-center justify-center font-extrabold text-[31px] shrink-0"
+                      className="w-11 h-11 rounded-2xl flex items-center justify-center font-extrabold text-[27px] shrink-0"
                       style={{
                         backgroundColor: topOnDark ? '#FFFFFF' : neutralAccent,
                         color: topOnDark ? palette.layers[3] : '#FFFFFF',
@@ -1001,11 +1152,11 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                     </span>
                     <div className="flex-1 min-w-0">
                       <p
-                        className="text-[35px] font-bold leading-[1.24]"
+                        className={`${qTextClass} font-bold`}
                         style={{ color: topOnDark ? '#FFFFFF' : neutralDark }}
                       >
                         <InlineEditableText
-                          value={q.question}
+                          value={cleanQuestion}
                           editable={editable && !isThumbnail}
                           multiline
                           onCommit={(next) =>
@@ -1021,7 +1172,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                   </div>
 
                   {hasMcOptions ? (
-                    <div className="grid grid-cols-2 gap-4 pl-[68px] mt-3 flex-1 items-center">
+                    <div className="grid grid-cols-2 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-2.5 pl-[56px] flex-1 min-h-0">
                       {q.options!.slice(0, 4).map((opt, oi) => {
                         const letter = String.fromCharCode(65 + oi);
                         const cleanOptText = opt.replace(/^[A-D][\s.):\-]+/i, '');
@@ -1038,7 +1189,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                         if (revealed) {
                           if (isCorrect) {
                             pillClass =
-                              'bg-emerald-600 border-emerald-700 text-white shadow-lg ring-4 ring-emerald-400/25';
+                              'bg-emerald-600 border-emerald-700 text-white shadow-md ring-2 ring-emerald-400/30';
                             badgeClass = 'bg-white/20 text-white px-2 py-0.5 rounded-lg';
                             badgeStyle = { color: '#FFFFFF' };
                           } else {
@@ -1054,7 +1205,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                         return (
                           <div
                             key={oi}
-                            className={`rounded-2xl px-5 py-4 border-2 text-[28px] font-bold leading-snug flex items-center gap-3 transition-all ${pillClass}`}
+                            className={`rounded-xl border-2 font-bold flex items-center gap-2.5 min-h-0 overflow-hidden transition-all ${optTextClass} ${pillClass}`}
                           >
                             <button
                               type="button"
@@ -1083,7 +1234,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                             >
                               {letter}.
                             </button>
-                            <span className="flex-1 min-w-0">
+                            <span className="flex-1 min-w-0 line-clamp-2">
                               <InlineEditableText
                                 value={cleanOptText}
                                 editable={editable && !isThumbnail}
@@ -1113,7 +1264,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                               />
                             </span>
                             {revealed && isCorrect && (
-                              <Check size={28} strokeWidth={3} className="shrink-0 text-white" />
+                              <Check size={24} strokeWidth={3} className="shrink-0 text-white" />
                             )}
                           </div>
                         );
@@ -1122,14 +1273,14 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                   ) : (
                     /* Open-question fallback reveal strip */
                     <div
-                      className={`h-[76px] rounded-2xl px-6 mt-3 flex items-center transition-all shrink-0 ${
+                      className={`h-[68px] rounded-2xl px-6 mt-2 flex items-center transition-all shrink-0 ${
                         revealed
                           ? 'bg-emerald-600 text-white border-2 border-emerald-700 shadow-md'
                           : 'border-2 border-dashed border-zinc-300/70 bg-zinc-50/40'
                       }`}
                     >
                       {revealed ? (
-                        <p className="text-[32px] font-extrabold leading-tight truncate w-full text-white">
+                        <p className="text-[28px] font-extrabold leading-tight truncate w-full text-white">
                           <InlineEditableText
                             value={q.answer}
                             editable={editable && !isThumbnail}
@@ -1157,7 +1308,11 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
 
     if (slide.presetId === 'title-divider') {
       return (
-        <div className="relative z-20 flex-1 flex flex-col justify-between px-20 pb-20 pt-10">
+        <div
+          className={`relative z-20 flex-1 flex flex-col justify-between pb-16 pt-10 ${
+            isHaloVariant ? 'px-[165px]' : 'px-20'
+          }`}
+        >
           <div className="max-w-[980px] space-y-8">
             <h1
               className="text-[74px] font-extrabold leading-[1.06] tracking-tight"
@@ -1248,6 +1403,207 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       );
     }
 
+    if (
+      slide.presetId === 'vocab-words-only' ||
+      slide.presetId === 'vocab-single-term-focus' ||
+      slide.presetId === 'vocabulary-spotlight'
+    ) {
+      const terms =
+        slide.keyTermsStrip && slide.keyTermsStrip.length > 0
+          ? slide.keyTermsStrip
+          : slide.bodyBlocks.map((b) => ({
+              term: b.heading || 'Key Term',
+              definition: b.content.replace(/^[•\-*]\s*/gm, ''),
+            }));
+
+      if (slide.presetId === 'vocab-single-term-focus') {
+        const focus = terms[0] || { term: slide.title, definition: '' };
+        const noteBlocks = slide.keyTermsStrip?.length ? slide.bodyBlocks : slide.bodyBlocks.slice(1);
+        return (
+          <div className={`relative z-20 flex-1 flex gap-10 min-h-0 ${contentPad}`}>
+            <div className="w-[820px] shrink-0 flex flex-col justify-center gap-6">
+              <div
+                className={`rounded-3xl p-10 border-l-[12px] shadow-lg space-y-5 ${
+                  topOnDark
+                    ? 'bg-white/14 backdrop-blur-md border-y-2 border-r-2 border-white/30'
+                    : 'bg-white/95 border-y-2 border-r-2'
+                }`}
+                style={{
+                  borderColor: topOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
+                  borderLeftColor: topOnDark ? '#FFFFFF' : neutralAccent,
+                }}
+              >
+                <div className="flex items-center gap-4">
+                  <DualCodeBadgeControl
+                    iconId={slide.bodyBlocks[0]?.dualCodeIcon || 'concept'}
+                    accentColor={neutralAccent}
+                    onDarkSurface={topOnDark}
+                    editable={false}
+                  />
+                  <h2
+                    className="text-[54px] font-extrabold leading-tight tracking-tight"
+                    style={{ color: topOnDark ? '#FFFFFF' : neutralDark }}
+                  >
+                    <InlineEditableText
+                      value={focus.term}
+                      editable={editable && !isThumbnail}
+                      onCommit={(next) => {
+                        if (slide.keyTermsStrip?.length) {
+                          onUpdateSlide?.({
+                            keyTermsStrip: slide.keyTermsStrip.map((t, idx) =>
+                              idx === 0 ? { ...t, term: next } : t
+                            ),
+                          });
+                        } else if (slide.bodyBlocks[0]) {
+                          updateBlock(slide.bodyBlocks[0].id, { heading: next });
+                        }
+                      }}
+                    />
+                  </h2>
+                </div>
+                <p
+                  className="text-[36px] leading-[1.38] font-medium"
+                  style={{ color: topOnDark ? '#FFFFFF' : neutralDark }}
+                >
+                  <InlineEditableText
+                    value={focus.definition}
+                    placeholder="Add clear definition for pupils to write..."
+                    editable={editable && !isThumbnail}
+                    multiline
+                    onCommit={(next) => {
+                      if (slide.keyTermsStrip?.length) {
+                        onUpdateSlide?.({
+                          keyTermsStrip: slide.keyTermsStrip.map((t, idx) =>
+                            idx === 0 ? { ...t, definition: next } : t
+                          ),
+                        });
+                      } else if (slide.bodyBlocks[0]) {
+                        updateBlock(slide.bodyBlocks[0].id, { content: next });
+                      }
+                    }}
+                  />
+                </p>
+              </div>
+              {noteBlocks.map((b, i) => renderCard(b, i))}
+            </div>
+
+            <div className="flex-1 flex items-center justify-center min-w-0">
+              <div className="h-[670px] w-full flex items-center justify-center">
+                {renderMediaFrame(
+                  effectiveMedia,
+                  'w-full h-full',
+                  'Dual-Coding Term Visual',
+                  bottomOnDark
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      const isWordsOnly = slide.presetId === 'vocab-words-only';
+      return (
+        <div className={`relative z-20 flex-1 flex gap-10 min-h-0 ${contentPad}`}>
+          <div className="w-[860px] shrink-0 flex flex-col justify-center gap-4 min-h-0">
+            {terms.slice(0, 6).map((kt, i) => {
+              const blockIcon = slide.bodyBlocks[i]?.dualCodeIcon || 'concept';
+              const compactRow = terms.length >= 5;
+              return (
+                <div
+                  key={i}
+                  className={`rounded-2xl border-2 px-6 ${
+                    compactRow ? 'py-3.5' : 'py-4.5'
+                  } shadow-sm flex items-start gap-4 ${
+                    topOnDark
+                      ? 'bg-white/14 backdrop-blur-md border-white/30'
+                      : 'bg-white/95'
+                  }`}
+                  style={topOnDark ? undefined : { borderColor: neutralBorder }}
+                >
+                  <DualCodeBadgeControl
+                    iconId={blockIcon}
+                    accentColor={neutralAccent}
+                    onDarkSurface={topOnDark}
+                    editable={false}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div
+                      className={`${
+                        compactRow ? 'text-[31px]' : 'text-[35px]'
+                      } font-extrabold leading-tight`}
+                      style={{ color: topOnDark ? '#FFFFFF' : neutralAccent }}
+                    >
+                      <InlineEditableText
+                        value={kt.term}
+                        editable={editable && !isThumbnail}
+                        onCommit={(next) => {
+                          if (slide.keyTermsStrip?.length) {
+                            onUpdateSlide?.({
+                              keyTermsStrip: slide.keyTermsStrip.map((item, idx) =>
+                                idx === i ? { ...item, term: next } : item
+                              ),
+                            });
+                          } else if (slide.bodyBlocks[i]) {
+                            updateBlock(slide.bodyBlocks[i].id, { heading: next });
+                          }
+                        }}
+                      />
+                    </div>
+                    {isWordsOnly ? (
+                      <div
+                        className={`mt-2.5 border-b-2 border-dashed ${
+                          compactRow ? 'h-7' : 'h-10'
+                        } ${
+                          topOnDark ? 'border-white/40' : 'border-zinc-300'
+                        }`}
+                      />
+                    ) : (
+                      <div
+                        className={`mt-1 ${
+                          compactRow ? 'text-[24px]' : 'text-[27px]'
+                        } leading-snug font-medium`}
+                        style={{
+                          color: topOnDark ? 'rgba(255,255,255,0.92)' : neutralDark,
+                        }}
+                      >
+                        <InlineEditableText
+                          value={kt.definition}
+                          editable={editable && !isThumbnail}
+                          multiline
+                          onCommit={(next) => {
+                            if (slide.keyTermsStrip?.length) {
+                              onUpdateSlide?.({
+                                keyTermsStrip: slide.keyTermsStrip.map((item, idx) =>
+                                  idx === i ? { ...item, definition: next } : item
+                                ),
+                              });
+                            } else if (slide.bodyBlocks[i]) {
+                              updateBlock(slide.bodyBlocks[i].id, { content: next });
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex-1 flex items-center justify-center min-w-0">
+            <div className="h-[670px] w-full flex items-center justify-center">
+              {renderMediaFrame(
+                effectiveMedia,
+                'w-full h-full',
+                'Dual-Coding Vocabulary Visual',
+                bottomOnDark
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (slide.presetId === 'comparison-two-column') {
       const leftBlocks = slide.bodyBlocks.filter((b) => b.column !== 'right');
       const rightBlocks = slide.bodyBlocks.filter((b) => b.column === 'right');
@@ -1256,7 +1612,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         <div
           className={`relative z-20 flex-1 grid ${
             effectiveMedia && !hasFullBottomImage ? 'grid-cols-12' : 'grid-cols-2'
-          } gap-8 px-20 py-10 min-h-0`}
+          } gap-8 min-h-0 ${contentPad}`}
         >
           <div
             className={`${
@@ -1285,7 +1641,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
 
     if (slide.presetId === 'process-timeline-flow') {
       return (
-        <div className="relative z-20 flex-1 flex flex-col justify-center px-20 py-8 gap-8 min-h-0">
+        <div className={`relative z-20 flex-1 flex flex-col justify-center gap-8 min-h-0 ${contentPad}`}>
           <div
             className="grid gap-6"
             style={{
@@ -1316,26 +1672,26 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       Boolean(effectiveMedia) && effectiveMedia?.placement !== 'fill-bottom-layer';
     const showRightColumn =
       bottomBlocks.length > 0 || hasBoxedMedia || hasFullBottomImage || isDualCodingLayout;
+    const leftRenderBlocks = isDualCodingLayout && (hasBoxedMedia || !bottomBlocks.length)
+      ? slide.bodyBlocks
+      : topBlocks;
 
     return (
-      <div
-        className={`relative z-20 flex-1 flex gap-10 px-20 py-8 min-h-0 ${
-          isLeftSpine ? 'pl-[470px]' : ''
-        }`}
-      >
+      <div className={`relative z-20 flex-1 flex gap-10 min-h-0 ${contentPad}`}>
         {/* Left Top-Sheet Zone */}
         <div
-          className={`flex flex-col justify-center gap-6 ${
+          className={`flex flex-col justify-center gap-5 ${
             showRightColumn ? 'w-[840px] shrink-0' : 'flex-1 max-w-[1160px]'
           }`}
         >
-          {topBlocks.map((b, i) => renderCard(b, i))}
+          {leftRenderBlocks.map((b, i) => renderCard(b, i))}
         </div>
 
         {/* Right Zone: Designated Dual-Coding Visual Area or Bottom-Layer Cards */}
         {showRightColumn && (
           <div className="flex-1 flex flex-col justify-center gap-6 min-w-0">
-            {bottomBlocks.map((b, i) => renderCard(b, i))}
+            {!(isDualCodingLayout && (hasBoxedMedia || !bottomBlocks.length)) &&
+              bottomBlocks.map((b, i) => renderCard(b, i))}
 
             {!hasFullBottomImage && (isDualCodingLayout || hasBoxedMedia) && (
               <div className="h-[670px] w-full flex items-center justify-center">
@@ -1399,20 +1755,6 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
 
         {renderPresetContent(palette)}
 
-        {/* Monochrome Corner Routine Icons (cleanly pinned in bottom-right corner, never inside text cards) */}
-        {!isTitlePage && slide.routineIcons && slide.routineIcons.length > 0 && (
-          <div className="absolute bottom-7 right-12 z-30 flex items-center gap-2.5 pointer-events-none">
-            {slide.routineIcons.slice(0, 3).map((ri) => (
-              <RoutineBadgeIcon
-                key={ri}
-                type={ri}
-                monochromeCorner
-                onDark={cornerOnDark}
-              />
-            ))}
-          </div>
-        )}
-
         {/* Interactive Wave Path & Draggable Control Points Overlay */}
         {showWavePathEditor &&
           !hideWaveBackground &&
@@ -1421,7 +1763,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
             <svg
               ref={svgOverlayRef}
               viewBox="0 0 1920 1080"
-              className="absolute inset-0 w-full h-full z-40 pointer-events-auto"
+              className="absolute inset-0 w-full h-full z-40 pointer-events-auto overflow-visible"
             >
               <path
                 d={
@@ -1436,39 +1778,55 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 strokeDasharray="18 12"
                 strokeLinecap="round"
               />
-              {computedPaper.controlPoints.map((pt, idx) => (
-                <g
-                  key={idx}
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    setDraggingPts(computedPaper.controlPoints);
-                    setDragIdx(idx);
-                  }}
-                  style={{ cursor: 'grab' }}
-                >
-                  <circle cx={pt.x} cy={pt.y} r={30} fill="transparent" />
-                  <circle
-                    cx={pt.x}
-                    cy={pt.y}
-                    r={16}
-                    fill={dragIdx === idx ? '#D97706' : '#FFFFFF'}
-                    stroke="#D97706"
-                    strokeWidth={6}
-                  />
-                  <text
-                    x={pt.x}
-                    y={pt.y + 7}
-                    textAnchor="middle"
-                    fontSize="16"
-                    fontWeight="800"
-                    fill={dragIdx === idx ? '#FFFFFF' : '#92400E'}
-                    pointerEvents="none"
+              {computedPaper.controlPoints.map((pt, idx) => {
+                const hx = Math.max(18, Math.min(1902, pt.x));
+                const hy = Math.max(18, Math.min(1062, pt.y));
+                const isOutside = Math.abs(hx - pt.x) > 2 || Math.abs(hy - pt.y) > 2;
+                return (
+                  <g
+                    key={idx}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setDraggingPts(computedPaper.controlPoints);
+                      setDragIdx(idx);
+                    }}
+                    style={{ cursor: 'grab' }}
                   >
-                    {idx + 1}
-                  </text>
-                </g>
-              ))}
+                    {isOutside && (
+                      <line
+                        x1={hx}
+                        y1={hy}
+                        x2={pt.x}
+                        y2={pt.y}
+                        stroke="#D97706"
+                        strokeWidth={3}
+                        strokeDasharray="6 6"
+                      />
+                    )}
+                    <circle cx={hx} cy={hy} r={30} fill="transparent" />
+                    <circle
+                      cx={hx}
+                      cy={hy}
+                      r={16}
+                      fill={dragIdx === idx ? '#D97706' : '#FFFFFF'}
+                      stroke="#D97706"
+                      strokeWidth={6}
+                    />
+                    <text
+                      x={hx}
+                      y={hy + 7}
+                      textAnchor="middle"
+                      fontSize="16"
+                      fontWeight="800"
+                      fill={dragIdx === idx ? '#FFFFFF' : '#92400E'}
+                      pointerEvents="none"
+                    >
+                      {idx + 1}
+                    </text>
+                  </g>
+                );
+              })}
             </svg>
           )}
       </div>

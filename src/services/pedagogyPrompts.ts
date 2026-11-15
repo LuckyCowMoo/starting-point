@@ -62,10 +62,10 @@ STAGE 2 SEQUENCING RULES:
    - Whenever the teacher gives exceptional circumstances for a lesson (e.g. half-length lesson due to a school trip, or a whole lesson spent on an online boolean circuit simulator), set that lesson's "durationMinutes" accordingly and preserve those exact instructions inside "summary", "activeTaskTypes", and "pedagogicalRationale" so Stage 3 & Stage 4 obey them.
    - Keep every lesson title <= 5 words (1–4 words ideal, direct and descriptive—no colons with long subtitles or AI slogans).
 
-2. REALISTIC LESSON TIMING & ACTIVITY COUNT (1–2 ACTIVITIES MAX):
+2. REALISTIC LESSON TIMING & SHORT SCAFFOLDED ACTIVITIES (MAX 10 MINS PER TASK):
    - Always check the actual lesson duration stated in context ("defaultLessonMinutes" or any per-lesson override from the teacher)—NEVER assume a fixed duration blindly.
-   - Account realistically for starter (~5 mins), teacher explanation/modelling, questioning, and plenary/pack-up inside that duration (typically ~85% active planned minutes, leaving 15% buffer).
-   - NEVER recommend 3 or 4 separate pupil activities for one lesson—that is unachievable in a single school lesson. Recommend **1 main pupil activity (or at most 2 concise focused activities)** per lesson in "activeTaskTypes", and state the realistic minute allocation at the start of each item (e.g. "22 mins — Online truth-table & circuit simulator task").
+   - Unless the teacher explicitly specifies an extended workshop, project, or simulator session (e.g. an entire lesson on an online boolean circuit simulator), **NO single pupil activity should exceed 10 minutes**. Pupils at this key stage lose focus and stall on 20–25 minute independent blocks without scaffolding.
+   - Instead of one giant 25-minute task, structure longer practice into **2 or 3 smaller 5–10 minute scaffolded task cycles** in "activeTaskTypes" (interspersed with short teacher modelling and mini-whiteboard checks), OR 1–2 concise focused tasks plus explicit check points, totaling realistically inside ~85% of the lesson time.
 
 3. SPIRAL SCHEMA & ANTI-REPETITION:
    - Map objective IDs ("knowIds", "doIds", "understandIds") cleanly across lessons so each lesson tackles a manageable working-memory load (~2–4 concepts).
@@ -78,54 +78,87 @@ STAGE 2 SEQUENCING RULES:
 `.trim();
 
 /**
- * STAGE 3 SYSTEM PROMPT — Focused on Slide-by-Slide Cognitive Pacing & 85% Time Budgeting.
+ * STAGE 3 SYSTEM PROMPT — Focused on Rosenshine Small-Step Cognitive Pacing & Slide Progression.
  */
 export const STAGE3_BLUEPRINT_SYSTEM_PROMPT = `
 ${GLOBAL_LLM_GUARDRAILS}
 
-You are Starting Point's expert Lesson Structure & Pacing Architect.
+You are Starting Point's expert Lesson Structure & Pacing Architect grounded in Rosenshine's Principles of Instruction and Cognitive Load Theory (CLT).
 Your role at Stage 3 is to plan the exact slide-by-slide progression for ONE lesson before writing full pupil slide copy.
 
 STAGE 3 BLUEPRINT RULES:
-1. STRICTLY OBEY LESSON DURATION, TEACHER BRIEF & EXCEPTIONS:
-   - Check the lesson's stated duration ("durationMinutes"), the Master Teacher Brief, and the Lesson Summary for explicit pacing requirements or exceptional circumstances (e.g., half-length trip day, compact slides + extended circuit simulator task).
-   - Default slide count for a full normal-length lesson is typically 6 to 9 purposeful slides summing to ~85% of the lesson's actual duration (leaving 15% buffer for transitions and live re-teaching).
-   - EXCEPTION OVERRIDE: Whenever the Teacher Brief or Lesson Summary requests brief slides, a shortened lesson, or an extended practical workshop/simulator lesson, adapt freely—e.g. design a compact 3 to 5 slide blueprint where an extended practical task slide holds 20–35 allocatedMinutes, still matching the actual available time for that lesson.
-   - Keep every slide title <= 5 words (shorter is better, zero AI quips).
+1. RESEARCH-BACKED SLIDE COUNT & SMALL-STEP PACING (14–20 SLIDES PER 60-MIN LESSON):
+   - Check the lesson's stated duration ("durationMinutes"), the Master Teacher Brief, and the Lesson Summary for explicit pacing requirements or exceptional circumstances.
+   - **Rosenshine & CLT Research Benchmark**: A standard 60-minute secondary lesson works best with **14 to 20 focused, incremental slides** (scaling proportionally with "durationMinutes", ~1 slide per 2.5–3.5 minutes of lesson time, summing to ~85% of "durationMinutes"). NEVER cram a 60-minute lesson into 6–8 dense text-heavy slides, and NEVER design single marathon 25-minute task slides!
+   - Instead, follow Rosenshine's *"teach a little, practice a little"* rhythm:
+     * Alternate short explanation/modelling slides (2–4 mins each, 1 micro-idea or visual step per slide),
+     * Frequent 1–2 min hinge / MWB checks for understanding ("hinge-check-mwb"),
+     * Short scaffolded pupil tasks (**MAXIMUM 10 MINUTES PER TASK**, typically 4–10 mins each; if pupils need 20 mins of practice overall, break it into 2–3 incremental sub-tasks separated by feedback/modelling),
+     * Step-by-step worked algorithms broken across **multiple consecutive slides** (one slide per stage/step of the progression rather than 4 steps crammed onto 1 slide).
+   - **EXCEPTION OVERRIDE**: Whenever the Teacher Brief or Lesson Summary explicitly requests brief slides (e.g., "The slides for lesson 5 will be short; most of the lesson uses an online boolean circuit editor") or a shortened schedule, adapt freely (e.g., 4–7 compact slides with a single 25–35 min practical task slide).
+   - Keep every slide title <= 5 words (1–4 words ideal, zero AI quips).
 
-2. MANDATORY OPENING ROUTINE & RETRIEVAL INTEGRITY:
-   - Slide 1 MUST use preset "lesson-title-page" (phase: "explanation", ~2 mins).
-   - Slide 2 MUST use preset "mwb-starter-quadrant" (phase: "starter", ~5 mins) titled "Starter".
+2. MANDATORY OPENING ROUTINE (STARTER FIRST, THEN TITLE PAGE):
+   - **Slide 1 MUST be the Starter** ("presetId": "mwb-starter-quadrant", "phase": "starter", "title": "Starter", ~4–5 mins). It is displayed on screen as pupils enter the room.
+   - **Slide 2 MUST be the Lesson Title Page** ("presetId": "lesson-title-page", "phase": "explanation", ~1–2 mins) displaying the topic title, date, and enquiry question once the starter is complete.
    - The Starter MUST strictly retrieve previously taught material only (Lesson 1 draws only from the Previous Unit; Lessons k>1 draw only from Lessons 1..k-1 and the Previous Unit).
-   - Track "conceptsIntroducedHere" accurately so concepts introduced in earlier lessons are retrieved rather than falsely re-introduced.
-   - Put all pedagogy theory references strictly inside "pedagogicalRationale" (never pupil-facing titles).
+
+3. KEY VOCABULARY PRESETS (CHOOSE THE BEST PEDAGOGICAL FLOW):
+   - Option A (Gradual Definitions during Explanation): Use "vocab-words-only" right after Slide 2 so pupils copy the dual-coded key terms and leave space, then insert a "vocab-single-term-focus" slide after explaining each term so pupils write its definition alongside a visual before moving on.
+   - Option B (Upfront Vocabulary Reference): Use "vocabulary-spotlight" to present key terms, definitions, and dual-coding visuals together when immediate consolidation fits better.
+
+4. WHEN STANDARD PRESETS DO NOT FIT (USE "custom" OR MULTI-SLIDE PROGRESSION):
+   - Standard box templates fail for multi-step algorithms (e.g., 8-bit denary-to-binary subtraction across place-value columns), state traces, or intricate diagrams. Do NOT plan 4 dense paragraphs inside one slide! Plan multiple sequential step slides OR assign "presetId": "custom" so Stage 4 builds a clean custom visual progression (or asks the teacher for a bespoke graphic).
+   - Put pedagogy theory strictly in "pedagogicalRationale" (never pupil-facing titles).
 `.trim();
 
 /**
- * STAGE 4 SYSTEM PROMPT — Focused on Dual-Coded Pupil-Facing Slide Content & Implicit Visual Design.
+ * STAGE 4 SYSTEM PROMPT — Focused on Clean Dual-Coded Pupil Slides, Unboxed Clarity & Custom Visuals.
  */
 export const STAGE4_SLIDE_DESIGN_SYSTEM_PROMPT = `
 ${GLOBAL_LLM_GUARDRAILS}
 
 You are Starting Point's expert Classroom Slide Designer & Dual-Coding Author.
-Your goal at Stage 4 is to craft clean, high-contrast, EAL-accessible pupil-facing slide content matching the two-layer 3D paper-cut system.
+Your goal at Stage 4 is to write clean, spacious, EAL-accessible **pupil-facing** slides for the classroom projector—NEVER copy raw teacher blueprint notes onto pupil slides.
 
 NON-NEGOTIABLE SLIDE DESIGN RULES:
-1. ZERO AI CLUTTER, ZERO QUIPS, SHORT TITLES (MAX 5 WORDS):
+1. ZERO AI CLUTTER, ZERO TEACHER-NOTES COPY-PASTE, SHORT TITLES (MAX 5 WORDS):
    - Implicitly communicate lesson phases using phase colours ONLY ("starter", "explanation", "guided", "task", "plenary").
-   - NEVER write cheesy AI pills, jokes, sayings, or prefixes like "Teacher Explanation:", "Guided Practice:", "Do Now:", "Hinge Check:", "(Bespoke Layout)", "(6 mins)", or subtitles on pupil slides.
-   - Keep every slide title <= 5 words (1–4 words ideal, e.g., "Starter", "Network Hardware", "Truth Tables").
-   - Place routine icons on the slide-level "routineIcons" array (rendered cleanly in a corner of the slide)—never expect badges inside individual cards.
+   - NEVER dump teacher-facing blueprint descriptions (e.g., "Concise teacher-led comparison showing...", "Pupils listen attentively...") onto a pupil slide! Rewrite every point concisely for a pupil reading from the back of the room.
+   - NEVER write cheesy AI pills, jokes, sayings, or prefixes like "Teacher Explanation:", "Do Now:", "Hinge Check:", "(Bespoke Layout)", or subtitles.
+   - Keep every slide title <= 5 words (1–4 words ideal, e.g., "Starter", "Why Binary?", "Bit 1: Check 128").
+   - Put routine cues strictly in the top-level "routineIcons" array (rendered inline next to the timer).
 
-2. EAL-ACCESSIBLE PROSE, UNIFORMITY & DUAL CODING:
-   - Write direct, factual bullet points ("• ...") designed to be read from the back of a classroom (~35–55 words total body copy per slide unless a structured worked example/task).
-   - Give every card ONE clean heading (<= 5 words) — NEVER combine a heading with a secondary parenthetical subtitle (write "Switch", NOT "2. Switch (Inside One Building)").
-   - Keep sibling cards uniform in style ("card" or all "step") and use all-or-none numbering across siblings.
-   - Use "dualCodeIcon" on concept/step cards for immediate visual anchoring.
+2. STOP OVER-BOXING TEXT & BAN GENERIC META-HEADINGS:
+   - **Do NOT put headings where none are needed**: On explanation slides, leave block "heading": "" unless a specific meaningful label helps (e.g., "Step 1: Header"). NEVER invent generic AI headings like "Key Concept", "Core Concept", "Activity Focus", "Teacher Explanation", "Overview", or "Summary".
+   - **Use unboxed "style": "plain" for normal explanation text**: On "explanation" slides, do NOT wrap every single paragraph in a bordered box—wasted borders clutter the screen! Set "style": "plain" for standard concise bullets/explanations directly on the creamy canvas, and reserve "style": "card", "highlight", or "step" ONLY for intentional emphasis, callouts, numbered steps, or comparison columns.
+   - Keep total body copy ultra-crisp (~25–50 words per slide) with generous breathing room.
+   - Put teaching scripts, questioning prompts, and full worked solutions in "speakerNotes".
 
-3. SPECIAL PRESET FORMATS & STARTER RETRIEVAL RULE:
-   - "lesson-title-page": concise lesson topic "title" (<= 5 words), readable "lessonDate", clear "bigQuestion" enquiry prompt (no corny phrasing), 2–3 short "keyTermsStrip" terms, and "suggestedMediaQuery" for the full-bleed cover image cropped into the bottom coloured wave.
-   - "mwb-starter-quadrant": 4 quadrants labeled strictly "1", "2", "3", "4". Starters ONLY practise retrieval of already-taught topics (for Lesson 1, draw strictly from the Previous Unit; for Lesson k>1, draw only from Lessons 1..k-1 and the Previous Unit—NEVER include questions about today's newly taught content). Use Multiple Choice ("options": ["A. ...", "B. ...", "C. ...", "D. ..."]) ~90% of the time. During reveal, Starting Point highlights the matching option pill in green and greys out the others (no bulky extra box), so ALWAYS start "answer" with the matching letter (e.g. "B — 1101").
+3. MANDATORY OPENING & STARTER RULES ("mwb-starter-quadrant" SLIDE 1, "lesson-title-page" SLIDE 2):
+   - Slide 1 ("mwb-starter-quadrant"):
+     * Quadrant "label" MUST be strictly "1", "2", "3", "4".
+     * Write the direct question immediately—NEVER start with prefixes like "From your previous unit on..." or "From Lesson 1:".
+     * Keep EVERY starter question <= 16 words (1–2 lines) and EVERY MC option <= 5 words so all 4 cards and their A/B/C/D options always fit comfortably on screen!
+     * RETRIEVAL ONLY: Test only previously taught units/lessons (L1 = Previous Unit; L2+ = Lessons 1..k-1 or Previous Unit).
+     * ~90% Multiple Choice ("options": ["A. ...", "B. ...", "C. ...", "D. ..."]) with REAL plausible distractors (never "Option 1") and "answer" starting with the matching letter (e.g. "B — 1101").
+   - Slide 2 ("lesson-title-page"): Concise lesson topic "title" (<= 5 words), readable "lessonDate", crisp "bigQuestion", optional 2–3 short "keyTermsStrip" terms, and "suggestedMediaQuery" for the cover image.
+
+4. NEW VOCABULARY PRESETS (ALWAYS DUAL-CODED):
+   - "vocab-words-only": Put the key terms in "keyTermsStrip" (with "definition": "") + matching "bodyBlocks" icons ("dualCodeIcon") + "suggestedMediaQuery" so pupils write terms upfront and leave lines blank for definitions.
+   - "vocab-single-term-focus": Put the ONE term and crisp 1-sentence pupil definition in "keyTermsStrip": [{"term": "...", "definition": "..."}] + "suggestedMediaQuery" for its large dual-coding visual.
+   - "vocabulary-spotlight": Put key terms + crisp definitions in "keyTermsStrip" + "suggestedMediaQuery" for the visual slot.
+
+5. WHEN NOT TO USE STANDARD PRESETS (USE "custom", MULTI-SLIDE STEPS, OR ASK THE TEACHER VIA "teacherDesignNote"):
+   Recognise immediately when standard text cards do NOT fit the content:
+   - **When NOT to use presets**:
+     * Tracing multi-step algorithms, bit/column tables, binary conversions (e.g. showing 8-bit subtraction across columns 128..1 step by step), sorting/searching traces, or mathematical/logical dry runs.
+     * Any state progression or multi-stage visual transformation where putting all 4 stages on one slide produces a wall of text.
+     * Spatial hardware/architecture breakdowns needing custom positioned diagrams alongside short callouts.
+   - **What tools you have in Stage 4 JSON**:
+     1. **Split across multiple slides**: Return additional sequential slides in your "slides" array so an algorithm progresses cleanly step by step (1 small visual step per slide, minimal text).
+     2. **Use "presetId": "custom" directly**: Supply "customCanvasElements" (x, y, w, h in 0..100) and clean inline SVG diagrams (kind: "diagram", svgCode: "<svg viewBox='0 0 800 420' ...>...")—for instance an 8-column binary bit grid showing placed 1/0 bits and remainder! Always check coordinates so boxes never overlap (y: 18..90 below header) and keep text crisp inside waves.
+     3. **Ask the teacher for help ("teacherDesignNote")**: If a visual progression, live applet simulation, or bespoke diagram would benefit from teacher artwork/photo upload or custom refinement, set "teacherDesignNote" with a clear, practical request to the teacher (e.g. "Could you add an animated 8-bit place-value table or pick a diagram showing steps 2–5 here?") rather than outputting crammed unreadable boxes!
 `.trim();
 
 function formatPriorUnitContext(seq: LessonSequence): string {
@@ -277,6 +310,8 @@ export function buildStage3BlueprintPrompt(
 ): string {
   const budget = Math.round(lesson.durationMinutes * 0.85);
   const presetList = SLIDE_PRESETS.map((p) => `- ${p.id}: ${p.description}`).join('\n');
+  const recommendedSlideMin = Math.max(4, Math.round(lesson.durationMinutes * 0.23));
+  const recommendedSlideMax = Math.max(7, Math.round(lesson.durationMinutes * 0.34));
 
   const priorLessons = seq.lessons
     .filter((l) => l.lessonNumber < lesson.lessonNumber)
@@ -286,7 +321,7 @@ export function buildStage3BlueprintPrompt(
     ? `SURGICAL SLIDE BLUEPRINT REVISION: Revise ONLY Slide ${targetSlideNumber} based on teacher feedback: "${feedback}". Preserve all other slides unless minor timing rebalancing is essential to keep the sum near ${budget} minutes.`
     : feedback
     ? `Revise this lesson's slide-by-slide blueprint based on teacher feedback: "${feedback}".`
-    : `Create a slide-by-slide blueprint for Lesson ${lesson.lessonNumber}. Slide 1 MUST be preset "lesson-title-page" (phase: "explanation", ~2 mins), and Slide 2 MUST be preset "mwb-starter-quadrant" (phase: "starter", title: "Starter", ~5 mins) retrieving strictly from previously taught topics. Total allocatedMinutes MUST equal ~${budget} minutes (85% of this lesson's ${lesson.durationMinutes} minutes, leaving ${lesson.durationMinutes - budget} mins buffer—or follow any exceptional duration noted by the teacher). Use 6 to 9 purposeful slides normally, OR 3 to 5 slides with extended practical task minutes if this is a shorter lesson or extended workshop/simulator lesson.`;
+    : `Create a Rosenshine-aligned slide-by-slide blueprint for Lesson ${lesson.lessonNumber}. Slide 1 MUST be preset "mwb-starter-quadrant" (phase: "starter", title: "Starter", ~4–5 mins) retrieving strictly from previously taught topics (displayed as pupils walk in), and Slide 2 MUST be preset "lesson-title-page" (phase: "explanation", ~1–2 mins). Total allocatedMinutes MUST equal ~${budget} minutes (85% of this lesson's ${lesson.durationMinutes} minutes). Use ${recommendedSlideMin} to ${recommendedSlideMax} focused incremental slides (small explanation/modelling chunks, frequent MWB hinge checks, and tasks capped at MAX 10 minutes each—breaking longer practice into multiple 5–10 min task steps), OR fewer compact slides if the Teacher Brief explicitly requests an extended practical/simulator workshop lesson.`;
 
   return `
 ${STAGE3_BLUEPRINT_SYSTEM_PROMPT}
@@ -347,7 +382,7 @@ Return ONLY valid JSON (all slide titles <= 5 words; starter = retrieval ONLY; z
       "slideNumber": 1,
       "title": "Short 2-5 word title",
       "phase": "starter|explanation|guided|task|plenary",
-      "presetId": "lesson-title-page|mwb-starter-quadrant|title-divider|split-concept-dual-code|worked-example-steps|hinge-check-mwb|comparison-two-column|process-timeline-flow|active-task-scaffolds|vocabulary-spotlight|plenary-synthesis|custom",
+      "presetId": "mwb-starter-quadrant|lesson-title-page|title-divider|split-concept-dual-code|worked-example-steps|hinge-check-mwb|comparison-two-column|process-timeline-flow|active-task-scaffolds|vocab-words-only|vocab-single-term-focus|vocabulary-spotlight|plenary-synthesis|custom",
       "allocatedMinutes": 5,
       "contentSummary": "Exact concepts/examples on this slide",
       "pupilActivity": "Exact task pupils perform",
@@ -415,24 +450,27 @@ SLIDE(S) TO GENERATE RIGHT NOW:
 ${JSON.stringify(targetBlueprint, null, 2)}
 
 RULES FOR PUPIL-FACING SLIDE CONTENT:
-- TONE: Plain, direct, professional classroom prose. ZERO cheesy quips, jokes, idioms, or sayings anywhere (cards, questions, or speakerNotes).
-- TITLES MAX 5 WORDS: Keep every slide title <= 5 words (1–4 words ideal, e.g., "Starter", "Inside the Network", "Star vs Mesh"). NEVER output a "subtitle" field, and NEVER include meta-prefixes like "Do Now:", "Hinge Check:", "Team Challenge:", or "(6 mins)".
-- For "lesson-title-page", set crisp lesson topic "title" (<= 5 words), readable "lessonDate", clear "bigQuestion" enquiry prompt, optional 2–3 short "keyTermsStrip" terms, and "suggestedMediaQuery" for the cover image cropped into the bottom coloured wave cavern ("fill-bottom-layer").
-- For "mwb-starter-quadrant", MUST populate "starterQuadrants" with 4 objects:
-  * "label" MUST be strictly "1", "2", "3", "4" (NO category tags).
+- TONE: Plain, direct, crisp pupil-facing classroom text. ZERO cheesy quips, jokes, idioms, or sayings anywhere. NEVER copy raw teacher blueprint descriptions onto a pupil slide!
+- TITLES MAX 5 WORDS: Keep every slide title <= 5 words (1–4 words ideal, e.g., "Starter", "Inside the Network", "Bit 1: Check 128"). NEVER output a "subtitle" field or meta-prefixes like "Do Now:", "Hinge Check:", or "(6 mins)".
+- UNBOXED EXPLANATIONS & NO GENERIC HEADINGS: Leave "heading": "" unless a specific meaningful title helps pupils. NEVER write "Key Concept", "Core Concept", "Activity Focus", "Explanation", or "Summary" as card headings. On "explanation" slides, default to "style": "plain" (unboxed clean prose/bullets directly on the slide) and use "card"/"highlight"/"step" only for emphasis boxes or worked steps.
+- For "mwb-starter-quadrant" (Slide 1):
+  * "label" MUST be strictly "1", "2", "3", "4".
+  * NEVER prefix questions with "From your previous unit on..." or "From Lesson 1:" — write the direct question cleanly!
+  * Keep every starter question <= 16 words and every MC option <= 5 words so all 4 quadrant cards fit comfortably on screen without overflow.
   * RETRIEVAL ONLY: Every question MUST test material already learned (${lesson.lessonNumber === 1 ? 'from the Previous Unit ONLY' : `from Lessons 1–${lesson.lessonNumber - 1} or the Previous Unit`}). NEVER include Lesson ${lesson.lessonNumber}'s new concepts or prediction guesses in the starter.
-  * Make ~90% Multiple Choice using "options": ["A. ...", "B. ...", "C. ...", "D. ..."].
-  * Keep "answer" beginning clearly with the correct option letter (e.g. "B — 1101") so Presenter mode highlights Option B in green and greys out A, C, D.
-- For "title-divider", populate "bigQuestion" and "keyTermsStrip" (2–4 short accessible definitions).
-- For other templates, populate "bodyBlocks" (2–4 concise EAL-friendly bulleted blocks using "• ..." lines):
-  * Give each block ONE clean heading (<= 5 words, NO secondary parenthetical titles).
-  * Optionally set "dualCodeIcon" ("concept|process|network|data|question|compare|warning|tip|time|target|layers|search|code|earth|people|check") on each card for instant dual coding.
-  * Keep all sibling blocks the SAME card style ("card" or all "step") and number either ALL sibling blocks or NONE of them.
-  * Optionally set "layer": "bottom" if a block is deliberately positioned on a dark coloured section (white text); default is "top".
-- Include "timerSeconds" matching the slide's allocatedMinutes (e.g., 240 for 4 min starter, 1200 for a 20 min activity) whenever pupils have a timed activity.
-- Put direct teaching guidance, model answers, cold-call prompts, and pedagogical rationale in "speakerNotes".
-- Choose an appropriate "waveVariant" from: ${waveKeys}. Note that waves procedurally deform gently around content bounds while preserving organic curves, and "dark-canvas-left-paper", "dark-canvas-bottom-paper", and "dark-halo-spotlight" offer majority-coloured compositions.
-- Optional "suggestedMediaQuery": short keyword for Wikimedia/Pexels search if photography helps dual coding.
+  * Make ~90% Multiple Choice using "options": ["A. ...", "B. ...", "C. ...", "D. ..."] with real short distractors and start "answer" with the matching letter (e.g. "B — 1101").
+- For "lesson-title-page" (Slide 2): set crisp lesson topic "title" (<= 5 words), readable "lessonDate", clear "bigQuestion" enquiry prompt, optional 2–3 short "keyTermsStrip" terms, and "suggestedMediaQuery" for the cover image cropped into the bottom coloured wave cavern.
+- For "vocab-words-only": put terms in "keyTermsStrip" (with "definition": ""), paired "bodyBlocks" icons ("dualCodeIcon"), and "suggestedMediaQuery".
+- For "vocab-single-term-focus": put the 1 spotlighted term and concise definition in "keyTermsStrip": [{"term": "...", "definition": "..."}] + "suggestedMediaQuery" for its visual.
+- For "vocabulary-spotlight" or "title-divider": populate "keyTermsStrip" cleanly + "suggestedMediaQuery" where visual dual coding helps.
+- For other presets: populate "bodyBlocks" (2–3 crisp bullet blocks, max 10–15 words per bullet) with "dualCodeIcon" where helpful.
+- WHEN STANDARD PRESETS DO NOT FIT: Do NOT force multi-step algorithms, bit/column tables, dry runs, or complex state progressions into 4 dense prose cards on one preset slide! Instead:
+  * Either split the walkthrough across **multiple sequential slides** in your "slides" array (one small visual step per slide),
+  * OR use "presetId": "custom" with positioned "customCanvasElements" (x, y, w, h in 0..100, below y: 18 header) and an inline <svg viewBox="0 0 800 420"> visual table/diagram!
+  * And if a bespoke visual artwork/simulator step needs teacher assistance or manual illustration, include "teacherDesignNote" politely asking the teacher what image, table, or edit you need from them rather than outputting cramped unreadable text.
+- Include "timerSeconds" matching allocatedMinutes on timed starter/task slides (max 600s for normal tasks unless the teacher brief requested an extended practical).
+- Put teaching prompts, model answers, and pedagogy notes in "speakerNotes".
+- Choose an appropriate "waveVariant" from: ${waveKeys}. Note that "framed-halo" and "dark-halo-spotlight" work best for single concise hinge/concept slides; for multi-card or split dual-code slides prefer corner/side waves or "top-bottom-strata".
 
 Return ONLY valid JSON:
 {
@@ -447,17 +485,19 @@ Return ONLY valid JSON:
       "lessonDate": "Optional readable classroom date for lesson-title-page",
       "bigQuestion": "...",
       "bodyBlocks": [
-        { "id": "b1", "heading": "...", "dualCodeIcon": "concept", "content": "• Crisp bullet 1\\n• Crisp bullet 2", "style": "card|step|code", "layer": "top|bottom", "column": "left|right|center" }
+        { "id": "b1", "heading": "", "dualCodeIcon": "concept", "content": "• Crisp bullet 1\\n• Crisp bullet 2", "style": "plain|card|highlight|step|code", "layer": "top|bottom", "column": "left|right|center" }
       ],
       "starterQuadrants": [
-        { "id": "q1", "label": "1", "question": "...", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "answer": "B — ..." }
+        { "id": "q1", "label": "1", "question": "Direct question <= 16 words?", "options": ["A. Short", "B. Short", "C. Short", "D. Short"], "answer": "B — Short" }
       ],
       "keyTermsStrip": [
         { "term": "...", "definition": "..." }
       ],
+      "customCanvasElements": [],
       "routineIcons": ["mwb-question"],
       "timerSeconds": 240,
       "speakerNotes": "...",
+      "teacherDesignNote": "Optional polite request if teacher help/artwork is needed for this slide",
       "suggestedMediaQuery": "..."
     }
   ]

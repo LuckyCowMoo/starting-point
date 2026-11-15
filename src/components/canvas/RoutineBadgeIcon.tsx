@@ -5,7 +5,6 @@ import {
   ClipboardCheck,
   KeyRound,
   MessageSquareMore,
-  PencilRuler,
   Sparkles,
 } from 'lucide-react';
 import { RoutineIconType } from '../../types/curriculum';
@@ -18,6 +17,37 @@ interface RoutineBadgeProps {
   monochromeCorner?: boolean;
   onDark?: boolean;
 }
+
+/**
+ * Custom Mini-Whiteboard & Dry-Wipe Marker Pen SVG icon so pupils immediately
+ * recognise show-me board routines without reading a label.
+ */
+const MiniWhiteboardPenIcon: React.FC<{ size: number; strokeWidth?: number }> = ({
+  size,
+  strokeWidth = 2,
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    {/* Mini-whiteboard rounded frame with bottom ledge */}
+    <rect x="2.5" y="4.5" width="15" height="12.5" rx="2.2" />
+    <path d="M5 17v1.5h10V17" />
+    {/* Subtle writing line on whiteboard */}
+    <path d="M5.5 9.5h6.5" />
+    <path d="M5.5 13h4" />
+    {/* Angled dry-wipe marker pen beside/overlapping right edge */}
+    <path d="M19.5 4.5l2 2-7.8 7.8-2.6.6.6-2.6 7.8-7.8z" fill="currentColor" fillOpacity="0.16" />
+    <path d="M17.8 6.2l2 2" />
+  </svg>
+);
 
 export const RoutineBadgeIcon: React.FC<RoutineBadgeProps> = ({
   type,
@@ -33,7 +63,7 @@ export const RoutineBadgeIcon: React.FC<RoutineBadgeProps> = ({
       case 'write-in-books':
         return <BookOpenCheck size={size} strokeWidth={strokeWidth} />;
       case 'mwb-question':
-        return <PencilRuler size={size} strokeWidth={strokeWidth} />;
+        return <MiniWhiteboardPenIcon size={size} strokeWidth={strokeWidth} />;
       case 'pair-discussion':
         return <MessageSquareMore size={size} strokeWidth={strokeWidth} />;
       case 'independent-task':
@@ -52,13 +82,13 @@ export const RoutineBadgeIcon: React.FC<RoutineBadgeProps> = ({
       <span
         title={meta.label}
         aria-label={meta.label}
-        className={`inline-flex items-center justify-center w-11 h-11 rounded-2xl transition-colors ${
+        className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl border-2 transition-colors ${
           onDark
-            ? 'text-white/85 bg-white/10'
-            : 'text-zinc-800/80 bg-zinc-900/6'
+            ? 'text-white border-white/30 bg-white/14 shadow-md'
+            : 'text-zinc-800 border-zinc-300/80 bg-white/85 shadow-sm'
         }`}
       >
-        {renderIcon(28, 2.1)}
+        {renderIcon(34, 2.2)}
       </span>
     );
   }

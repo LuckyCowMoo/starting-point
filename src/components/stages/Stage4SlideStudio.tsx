@@ -137,20 +137,32 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
     const newNum = lesson.slidesData.length + 1;
     const isStarter = presetId === 'mwb-starter-quadrant';
     const isTitle = presetId === 'lesson-title-page';
+    const isVocabPreset =
+      presetId === 'vocab-words-only' ||
+      presetId === 'vocab-single-term-focus' ||
+      presetId === 'vocabulary-spotlight';
     const coverTemplate = SVG_DIAGRAM_TEMPLATES[5] || SVG_DIAGRAM_TEMPLATES[0];
     const newSlide: SlideData = {
       id: `sl-manual-${Date.now()}`,
       blueprintId: '',
       slideNumber: newNum,
-      phase: isStarter ? 'starter' : isTitle ? 'explanation' : 'task',
+      phase: isStarter
+        ? 'starter'
+        : isTitle || isVocabPreset
+        ? 'explanation'
+        : 'task',
       presetId,
       waveVariant,
       invertWaveLayers,
       title: isTitle
         ? lesson.title
         : isStarter
-        ? 'Starter Quiz'
-        : 'New Slide Activity',
+        ? 'Starter'
+        : presetId === 'vocab-single-term-focus'
+        ? 'Key Term Focus'
+        : isVocabPreset
+        ? 'Key Vocabulary'
+        : 'New Activity',
       lessonDate: isTitle
         ? new Date().toLocaleDateString('en-GB', {
             weekday: 'long',
@@ -160,51 +172,94 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
           })
         : undefined,
       bigQuestion: isTitle ? lesson.summary : undefined,
+      keyTermsStrip: isVocabPreset
+        ? presetId === 'vocab-single-term-focus'
+          ? [
+              {
+                term: 'Key Term',
+                definition:
+                  'Click on the slide to write a concise, pupil-friendly definition.',
+              },
+            ]
+          : [
+              {
+                term: 'Term 1',
+                definition:
+                  presetId === 'vocab-words-only'
+                    ? ''
+                    : 'Click to enter crisp definition.',
+              },
+              {
+                term: 'Term 2',
+                definition:
+                  presetId === 'vocab-words-only'
+                    ? ''
+                    : 'Click to enter crisp definition.',
+              },
+              {
+                term: 'Term 3',
+                definition:
+                  presetId === 'vocab-words-only'
+                    ? ''
+                    : 'Click to enter crisp definition.',
+              },
+            ]
+        : undefined,
       starterQuadrants: isStarter
         ? [
             {
               id: 'q1',
               label: '1',
               question: 'Question 1 prompt...',
-              options: ['A. Option 1', 'B. Option 2', 'C. Option 3', 'D. Option 4'],
-              answer: 'A. Option 1',
+              options: ['A. Choice A', 'B. Choice B', 'C. Choice C', 'D. Choice D'],
+              answer: 'A — Choice A',
             },
             {
               id: 'q2',
               label: '2',
               question: 'Question 2 prompt...',
-              options: ['A. Option 1', 'B. Option 2', 'C. Option 3', 'D. Option 4'],
-              answer: 'B. Option 2',
+              options: ['A. Choice A', 'B. Choice B', 'C. Choice C', 'D. Choice D'],
+              answer: 'B — Choice B',
             },
             {
               id: 'q3',
               label: '3',
               question: 'Question 3 prompt...',
-              options: ['A. Option 1', 'B. Option 2', 'C. Option 3', 'D. Option 4'],
-              answer: 'C. Option 3',
+              options: ['A. Choice A', 'B. Choice B', 'C. Choice C', 'D. Choice D'],
+              answer: 'C — Choice C',
             },
             {
               id: 'q4',
               label: '4',
               question: 'Question 4 prompt...',
-              options: ['A. Option 1', 'B. Option 2', 'C. Option 3', 'D. Option 4'],
-              answer: 'D. Option 4',
+              options: ['A. Choice A', 'B. Choice B', 'C. Choice C', 'D. Choice D'],
+              answer: 'D — Choice D',
             },
           ]
         : undefined,
       bodyBlocks:
         isStarter || isTitle
           ? []
+          : isVocabPreset
+          ? [
+              { id: `vb-${Date.now()}-1`, content: '', dualCodeIcon: 'data' },
+              { id: `vb-${Date.now()}-2`, content: '', dualCodeIcon: 'process' },
+              { id: `vb-${Date.now()}-3`, content: '', dualCodeIcon: 'layers' },
+            ]
           : [
               {
                 id: `b-${Date.now()}`,
-                heading: 'Key Concept or Task',
+                heading: '',
                 dualCodeIcon: 'concept',
-                content: '• Click right on the slide canvas to edit this text\n• Keep sentences short and EAL-friendly',
-                style: 'card',
+                content: '• Click directly on the slide canvas to edit this text\n• Keep sentences short and readable',
+                style: 'plain',
               },
             ],
-      routineIcons: isStarter ? ['mwb-question'] : ['pair-discussion', 'write-in-books'],
+      routineIcons: isStarter
+        ? ['mwb-question']
+        : isVocabPreset
+        ? ['key-vocab', 'write-in-books']
+        : ['pair-discussion', 'write-in-books'],
       mediaItem:
         isTitle && coverTemplate
           ? {
@@ -446,6 +501,45 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
               </button>
             </div>
           </div>
+
+          {slide.teacherDesignNote && (
+            <div className="w-full max-w-5xl rounded-2xl bg-amber-50 border-2 border-amber-300 px-4 py-3 flex flex-wrap items-start justify-between gap-3 text-xs text-amber-950 shadow-xs">
+              <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                <AlertCircle size={16} className="text-amber-700 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-extrabold uppercase tracking-wider text-[10px] text-amber-800 block">
+                    AI Design Request for Teacher
+                  </span>
+                  <p className="mt-0.5 leading-relaxed font-medium">
+                    {slide.teacherDesignNote}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setMediaOpen(true)}
+                  className="px-2.5 py-1.5 rounded-lg bg-white border border-amber-300 font-bold text-amber-900 hover:bg-amber-100 transition"
+                >
+                  Pick Image / SVG
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectorTab('ai')}
+                  className="px-2.5 py-1.5 rounded-lg bg-amber-600 text-white font-bold hover:bg-amber-700 transition"
+                >
+                  Open Bespoke AI
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateActiveSlide({ teacherDesignNote: undefined })}
+                  className="px-2 py-1.5 rounded-lg text-amber-700 hover:bg-amber-200/60 font-semibold"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="w-full max-w-5xl rounded-3xl overflow-hidden slide-stage-shadow border border-zinc-300/80 bg-[#FAF6F0]">
             <SlideCanvas
@@ -758,6 +852,86 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                   )}
                 </div>
 
+                {/* Vocabulary Terms Editor when a Vocabulary / Divider preset is active */}
+                {(slide.presetId === 'vocab-words-only' ||
+                  slide.presetId === 'vocab-single-term-focus' ||
+                  slide.presetId === 'vocabulary-spotlight' ||
+                  slide.presetId === 'title-divider' ||
+                  slide.presetId === 'lesson-title-page') && (
+                  <div className="space-y-2 border-t border-zinc-200 pt-3">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider text-[10px]">
+                        Key Vocabulary Terms
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateActiveSlide({
+                            keyTermsStrip: [
+                              ...(slide.keyTermsStrip || []),
+                              { term: 'New Term', definition: '' },
+                            ],
+                          })
+                        }
+                        className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-0.5"
+                      >
+                        <Plus size={12} /> Add Term
+                      </button>
+                    </div>
+                    {(slide.keyTermsStrip || []).map((kt, idx) => (
+                      <div
+                        key={idx}
+                        className="p-2 rounded-xl bg-[#FAF6F0] border border-zinc-200 space-y-1.5"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            value={kt.term}
+                            onChange={(e) =>
+                              updateActiveSlide({
+                                keyTermsStrip: slide.keyTermsStrip?.map((item, i) =>
+                                  i === idx ? { ...item, term: e.target.value } : item
+                                ),
+                              })
+                            }
+                            placeholder="Key word..."
+                            className="flex-1 font-bold bg-white px-2 py-1 rounded-lg border border-zinc-200"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateActiveSlide({
+                                keyTermsStrip: slide.keyTermsStrip?.filter(
+                                  (_, i) => i !== idx
+                                ),
+                              })
+                            }
+                            className="p-1 text-zinc-400 hover:text-rose-600"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                        {slide.presetId !== 'vocab-words-only' && (
+                          <textarea
+                            value={kt.definition}
+                            rows={2}
+                            onChange={(e) =>
+                              updateActiveSlide({
+                                keyTermsStrip: slide.keyTermsStrip?.map((item, i) =>
+                                  i === idx
+                                    ? { ...item, definition: e.target.value }
+                                    : item
+                                ),
+                              })
+                            }
+                            placeholder="Definition..."
+                            className="w-full p-1.5 rounded-lg border border-zinc-200 bg-white resize-none"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Starter Quadrants OR Body Blocks Editor */}
                 {slide.presetId === 'mwb-starter-quadrant' &&
                 slide.starterQuadrants ? (
@@ -904,9 +1078,31 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                                 ),
                               })
                             }
-                            placeholder="Card heading"
+                            placeholder="Optional heading (blank = clean)"
                             className="flex-1 font-bold bg-white px-2 py-1 rounded-lg border border-zinc-200"
                           />
+                          <select
+                            value={b.style || (slide.phase === 'explanation' ? 'plain' : 'card')}
+                            onChange={(e) =>
+                              updateActiveSlide({
+                                bodyBlocks: slide.bodyBlocks.map((item, i) =>
+                                  i === idx
+                                    ? {
+                                        ...item,
+                                        style: e.target.value as 'plain' | 'card' | 'highlight' | 'step',
+                                      }
+                                    : item
+                                ),
+                              })
+                            }
+                            title="Block box style"
+                            className="px-1.5 py-1 rounded-lg text-[10px] font-bold border border-zinc-300 bg-white text-zinc-700"
+                          >
+                            <option value="plain">Plain Text</option>
+                            <option value="card">Boxed Card</option>
+                            <option value="highlight">Highlight Box</option>
+                            <option value="step">Step Card</option>
+                          </select>
                           <button
                             onClick={() =>
                               updateActiveSlide({

@@ -3469,7 +3469,9 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className="relative w-full aspect-video overflow-hidden select-none shadow-md"
+      className={`relative w-full aspect-video overflow-hidden select-none shadow-md ${
+        isThumbnail ? 'pointer-events-none' : ''
+      }`}
       style={{
         backgroundColor: hideWaveBackground ? '#F4F4F5' : palette.layers[3],
       }}

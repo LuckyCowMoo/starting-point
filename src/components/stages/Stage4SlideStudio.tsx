@@ -757,7 +757,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                     </button>
                   )}
                 </div>
-                <div className="rounded-xl overflow-hidden border border-zinc-200">
+                <div className="rounded-xl overflow-hidden border border-zinc-200 pointer-events-none">
                   <SlideCanvas slide={s} isThumbnail editorPreviewAllAnswers />
                 </div>
               </div>

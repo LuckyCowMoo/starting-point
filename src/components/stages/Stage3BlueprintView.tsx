@@ -293,6 +293,37 @@ export const Stage3BlueprintView: React.FC<Stage3BlueprintViewProps> = ({
             L{l.lessonNumber}: {l.title}
           </button>
         ))}
+        {sequence.lessons.length > 1 && (
+          <button
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Are you sure you want to delete Lesson ${lesson.lessonNumber}: "${lesson.title}"?`
+                )
+              ) {
+                const filtered = sequence.lessons.filter((l) => l.id !== lesson.id);
+                const renumbered = filtered.map((l, idx) => ({
+                  ...l,
+                  lessonNumber: idx + 1,
+                }));
+                onUpdateSequence({
+                  ...sequence,
+                  lessonCount: renumbered.length,
+                  lessons: renumbered,
+                  updatedAt: new Date().toISOString(),
+                });
+                if (renumbered[0]) {
+                  onSelectLesson(renumbered[0].id);
+                }
+              }
+            }}
+            className="px-3 py-2 rounded-2xl text-xs font-semibold text-zinc-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition flex items-center gap-1.5"
+            title={`Delete Lesson ${lesson.lessonNumber}`}
+          >
+            <Trash2 size={13} />
+            <span>Delete Lesson</span>
+          </button>
+        )}
       </div>
 
       {/* 85% Time Budget & AI Planning Header */}

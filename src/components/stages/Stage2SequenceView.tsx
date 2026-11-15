@@ -47,6 +47,62 @@ export const Stage2SequenceView: React.FC<Stage2SequenceViewProps> = ({
     number | 'all' | null
   >(null);
 
+  const handleDeleteLesson = (lessonId: string) => {
+    const l = sequence.lessons.find((item) => item.id === lessonId);
+    if (!l) return;
+    if (
+      !window.confirm(
+        `Are you sure you want to delete Lesson ${l.lessonNumber}: "${l.title}"?`
+      )
+    ) {
+      return;
+    }
+    const filtered = sequence.lessons.filter((item) => item.id !== lessonId);
+    const renumbered = filtered.map((item, idx) => ({
+      ...item,
+      lessonNumber: idx + 1,
+    }));
+    onUpdateSequence({
+      ...sequence,
+      lessonCount: renumbered.length,
+      lessons: renumbered,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const handleAddLesson = () => {
+    const nextNum = sequence.lessons.length + 1;
+    const newLesson: PlannedLesson = {
+      id: `lesson-${Date.now()}`,
+      lessonNumber: nextNum,
+      title: `Lesson ${nextNum}`,
+      durationMinutes: sequence.defaultLessonMinutes || 60,
+      timeBudgetMinutes: Math.round((sequence.defaultLessonMinutes || 60) * 0.85),
+      bufferMinutes: Math.round((sequence.defaultLessonMinutes || 60) * 0.15),
+      summary: '',
+      knowIds: [],
+      doIds: [],
+      understandIds: [],
+      starterRetrievalFocus: {
+        q1LastLesson: '',
+        q2LastWeek: '',
+        q3EarlierTopic: '',
+        q4Challenge: '',
+      },
+      activeTaskTypes: [],
+      pedagogicalRationale: '',
+      stage3Approved: false,
+      slidesBlueprint: [],
+      slidesData: [],
+    };
+    onUpdateSequence({
+      ...sequence,
+      lessonCount: nextNum,
+      lessons: [...sequence.lessons, newLesson],
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
   const handleGenerateAll = async () => {
     setLoadingLesson('all');
     setError(null);
@@ -217,13 +273,24 @@ export const Stage2SequenceView: React.FC<Stage2SequenceViewProps> = ({
                 </div>
               </div>
 
-              <button
-                onClick={() => onOpenLessonStage3(lesson.id)}
-                className="px-4 py-2 rounded-xl bg-zinc-900 text-white text-xs font-bold hover:bg-zinc-800 flex items-center gap-1.5 transition"
-              >
-                <span>Plan Lesson {lesson.lessonNumber} Slides</span>
-                <ArrowRight size={14} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onOpenLessonStage3(lesson.id)}
+                  className="px-4 py-2 rounded-xl bg-zinc-900 text-white text-xs font-bold hover:bg-zinc-800 flex items-center gap-1.5 transition"
+                >
+                  <span>Plan Lesson {lesson.lessonNumber} Slides</span>
+                  <ArrowRight size={14} />
+                </button>
+                {sequence.lessons.length > 1 && (
+                  <button
+                    onClick={() => handleDeleteLesson(lesson.id)}
+                    className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                    title={`Delete Lesson ${lesson.lessonNumber}`}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
+              </div>
             </div>
 
             <textarea
@@ -385,6 +452,14 @@ export const Stage2SequenceView: React.FC<Stage2SequenceViewProps> = ({
             </div>
           </div>
         ))}
+
+        <button
+          onClick={handleAddLesson}
+          className="w-full py-3.5 rounded-3xl border-2 border-dashed border-zinc-300 text-zinc-600 font-bold text-xs hover:border-zinc-500 hover:text-zinc-900 hover:bg-white transition flex items-center justify-center gap-2"
+        >
+          <Plus size={16} />
+          <span>Add Lesson to Sequence</span>
+        </button>
       </div>
 
       {/* Stage 2 Gate */}

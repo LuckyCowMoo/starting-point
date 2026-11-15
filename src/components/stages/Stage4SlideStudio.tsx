@@ -21,6 +21,8 @@ import {
   Timer,
   Trash2,
   Type,
+  Undo,
+  Redo,
   Wand2,
 } from 'lucide-react';
 import {
@@ -125,6 +127,95 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
   const slide = lesson.slidesData[safeIdx];
   const palette = PHASE_PALETTES[slide.phase];
 
+  const [historyPast, setHistoryPast] = useState<SlideData[][]>([]);
+  const [historyFuture, setHistoryFuture] = useState<SlideData[][]>([]);
+
+  const recordManualHistory = () => {
+    if (!lesson) return;
+    setHistoryPast((prev) => [...prev.slice(-30), lesson.slidesData]);
+    setHistoryFuture([]);
+  };
+
+  const handleUndo = () => {
+    if (historyPast.length === 0 || !lesson) return;
+    const previous = historyPast[historyPast.length - 1];
+    const newPast = historyPast.slice(0, -1);
+    setHistoryPast(newPast);
+    setHistoryFuture((prev) => [lesson.slidesData, ...prev]);
+    onUpdateSequence({
+      ...sequence,
+      updatedAt: new Date().toISOString(),
+      lessons: sequence.lessons.map((l) =>
+        l.id === lesson.id ? { ...l, slidesData: previous } : l
+      ),
+    });
+  };
+
+  const handleRedo = () => {
+    if (historyFuture.length === 0 || !lesson) return;
+    const next = historyFuture[0];
+    const newFuture = historyFuture.slice(1);
+    setHistoryFuture(newFuture);
+    setHistoryPast((prev) => [...prev, lesson.slidesData]);
+    onUpdateSequence({
+      ...sequence,
+      updatedAt: new Date().toISOString(),
+      lessons: sequence.lessons.map((l) =>
+        l.id === lesson.id ? { ...l, slidesData: next } : l
+      ),
+    });
+  };
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const tag = (activeEl?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || (activeEl as HTMLElement)?.isContentEditable) {
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleRedo();
+        } else {
+          e.preventDefault();
+          handleUndo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [historyPast, historyFuture, lesson?.slidesData]);
+
+  const handleDeleteCurrentLesson = () => {
+    if (!lesson) return;
+    if (
+      !window.confirm(
+        `Are you sure you want to delete Lesson ${lesson.lessonNumber}: "${lesson.title}"?`
+      )
+    ) {
+      return;
+    }
+    const filtered = sequence.lessons.filter((l) => l.id !== lesson.id);
+    const renumbered = filtered.map((l, idx) => ({
+      ...l,
+      lessonNumber: idx + 1,
+    }));
+    onUpdateSequence({
+      ...sequence,
+      lessonCount: renumbered.length,
+      lessons: renumbered,
+      updatedAt: new Date().toISOString(),
+    });
+    if (renumbered[0]) {
+      onSelectLesson(renumbered[0].id);
+      setSelectedSlideIdx(0);
+    }
+  };
+
   const updateLesson = (patch: Partial<PlannedLesson>) => {
     onUpdateSequence({
       ...sequence,
@@ -136,6 +227,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
   };
 
   const updateActiveSlide = (patch: Partial<SlideData>) => {
+    recordManualHistory();
     updateLesson({
       slidesData: lesson.slidesData.map((s) =>
         s.id === slide.id ? { ...s, ...patch } : s
@@ -374,6 +466,16 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                 L{l.lessonNumber}: {l.title}
               </button>
             ))}
+          {sequence.lessons.length > 1 && (
+            <button
+              onClick={handleDeleteCurrentLesson}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition flex items-center gap-1 shrink-0"
+              title={`Delete Lesson ${lesson.lessonNumber}`}
+            >
+              <Trash2 size={13} />
+              <span className="hidden md:inline">Delete Lesson</span>
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -460,6 +562,28 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
           {/* Quick Inline Canvas Toolbar */}
           <div className="w-full max-w-5xl flex flex-wrap items-center justify-between gap-2 px-1">
             <div className="flex flex-wrap items-center gap-1.5">
+              {/* Undo / Redo */}
+              <div className="flex items-center gap-1 border-r border-zinc-300 pr-1.5 mr-0.5">
+                <button
+                  type="button"
+                  onClick={handleUndo}
+                  disabled={historyPast.length === 0}
+                  className="p-1.5 rounded-lg bg-white border border-zinc-300 text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs"
+                  title="Undo manual edit (Ctrl+Z)"
+                >
+                  <Undo size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRedo}
+                  disabled={historyFuture.length === 0}
+                  className="p-1.5 rounded-lg bg-white border border-zinc-300 text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs"
+                  title="Redo manual edit (Ctrl+Y)"
+                >
+                  <Redo size={13} />
+                </button>
+              </div>
+
               <button
                 type="button"
                 onClick={() => {
@@ -1353,7 +1477,22 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
       <MediaPickerModal
         isOpen={mediaOpen}
         currentMedia={
-          mediaTargetElementId
+          mediaTargetElementId?.startsWith('vocab-media-')
+            ? (() => {
+                const idx = parseInt(mediaTargetElementId.replace('vocab-media-', ''), 10);
+                const t = slide.keyTermsStrip?.[idx];
+                if (!t) return slide.mediaItem;
+                return {
+                  id: `vocab-${idx}`,
+                  type: t.svgCode ? 'svg-diagram' : 'image',
+                  title: t.term,
+                  url: t.imageUrl,
+                  svgCode: t.svgCode,
+                  cropFit: 'contain',
+                  frameShape: 'clean',
+                };
+              })()
+            : mediaTargetElementId
             ? (() => {
                 const targetEl = slide.customCanvasElements?.find(
                   (el) => el.id === mediaTargetElementId
@@ -1378,6 +1517,30 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
           setMediaTargetElementId(null);
         }}
         onSelectMedia={(media) => {
+          if (mediaTargetElementId?.startsWith('vocab-media-')) {
+            const idx = parseInt(mediaTargetElementId.replace('vocab-media-', ''), 10);
+            const currentTerms = slide.keyTermsStrip || [];
+            if (currentTerms[idx]) {
+              updateActiveSlide({
+                keyTermsStrip: currentTerms.map((t, i) =>
+                  i === idx
+                    ? {
+                        ...t,
+                        imageUrl: media.type === 'image' ? media.url : undefined,
+                        svgCode: media.type === 'svg-diagram' ? media.svgCode : undefined,
+                      }
+                    : t
+                ),
+              });
+            } else if (idx === 0) {
+              updateActiveSlide({
+                mediaItem: media,
+              });
+            }
+            setMediaTargetElementId(null);
+            return;
+          }
+
           if (
             mediaTargetElementId &&
             slide.customCanvasElements?.some((el) => el.id === mediaTargetElementId)

@@ -6,7 +6,9 @@ import {
   Lock,
   PanelLeftClose,
   PanelLeftOpen,
+  RotateCcw,
   Settings,
+  Trash2,
 } from 'lucide-react';
 import {
   AppSettings,
@@ -57,6 +59,7 @@ export function App() {
   } | null>(null);
   const [exportLessonId, setExportLessonId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [confirmResetModalOpen, setConfirmResetModalOpen] = useState(false);
 
   const localDirHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
   const [localFolderName, setLocalFolderName] = useState<string | null>(null);
@@ -206,12 +209,85 @@ export function App() {
   const handleDeleteSequence = (sequenceId: string) => {
     setWorkspace((prev) => {
       const remaining = prev.sequences.filter((s) => s.id !== sequenceId);
+      if (remaining.length === 0) {
+        const freshSeq: LessonSequence = {
+          id: `seq-${Date.now()}`,
+          folderId: 'folder-root',
+          title: 'Untitled Lesson Sequence',
+          subject: 'Computing',
+          keyStage: 'KS3 (Year 8)',
+          lessonCount: 4,
+          defaultLessonMinutes: 60,
+          priorUnitSummary: '',
+          topicBrief: '',
+          updatedAt: new Date().toISOString(),
+          stage1Approved: false,
+          stage2Approved: false,
+          objectives: {
+            know: [],
+            do: [],
+            understand: [],
+            keyVocabulary: [],
+            misconceptions: [],
+            prerequisiteKnowledge: [],
+            pedagogicalSummary: '',
+          },
+          lessons: [],
+        };
+        setActiveSequenceId(freshSeq.id);
+        setActiveLessonId(null);
+        setActiveStage(1);
+        return { ...prev, sequences: [freshSeq] };
+      }
       if (activeSequenceId === sequenceId && remaining[0]) {
         setActiveSequenceId(remaining[0].id);
         setActiveLessonId(remaining[0].lessons[0]?.id || null);
       }
       return { ...prev, sequences: remaining };
     });
+  };
+
+  const handleStartAgain = () => {
+    if (!activeSequence) return;
+    const seqIdToDelete = activeSequence.id;
+    if (workspace.sequences.length <= 1) {
+      const freshSeq: LessonSequence = {
+        id: `seq-${Date.now()}`,
+        folderId: activeSequence.folderId,
+        title: 'Untitled Lesson Sequence',
+        subject: activeSequence.subject || 'Computing',
+        keyStage: activeSequence.keyStage || 'KS3 (Year 8)',
+        lessonCount: 4,
+        defaultLessonMinutes: 60,
+        priorUnitSummary: '',
+        topicBrief: '',
+        updatedAt: new Date().toISOString(),
+        stage1Approved: false,
+        stage2Approved: false,
+        objectives: {
+          know: [],
+          do: [],
+          understand: [],
+          keyVocabulary: [],
+          misconceptions: [],
+          prerequisiteKnowledge: [],
+          pedagogicalSummary: '',
+        },
+        lessons: [],
+      };
+      setWorkspace((prev) => ({
+        ...prev,
+        sequences: [freshSeq],
+      }));
+      setActiveSequenceId(freshSeq.id);
+      setActiveLessonId(null);
+      setActiveStage(1);
+    } else {
+      handleDeleteSequence(seqIdToDelete);
+      setActiveStage(1);
+    }
+    setConfirmResetModalOpen(false);
+    showToast('Lesson plan reset. Ready to start fresh in Stage 1.');
   };
 
   const handleConnectLocalFolder = async () => {
@@ -366,8 +442,19 @@ export function App() {
           })}
         </nav>
 
-        {/* Settings / API Key Trigger */}
+        {/* Actions: Start Again / Delete Plan + Settings */}
         <div className="flex items-center gap-2">
+          {activeSequence && (
+            <button
+              onClick={() => setConfirmResetModalOpen(true)}
+              className="px-3 py-2 rounded-xl text-xs font-bold border border-zinc-200 text-zinc-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 flex items-center gap-1.5 transition"
+              title="Delete this lesson plan and start again"
+            >
+              <RotateCcw size={13} className="text-zinc-500 hover:text-rose-600" />
+              <span className="hidden sm:inline">Start Again</span>
+            </button>
+          )}
+
           <button
             onClick={() => setSettingsOpen(true)}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold border flex items-center gap-2 transition ${
@@ -515,6 +602,43 @@ export function App() {
         }}
         onClose={() => setSettingsOpen(false)}
       />
+
+      {/* Confirmation Modal to Start Again / Delete Lesson Plan */}
+      {confirmResetModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-zinc-200 animate-reveal-pop">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center">
+              <Trash2 size={24} />
+            </div>
+            <div>
+              <h3 className="text-lg font-display font-extrabold text-zinc-900">
+                Delete Lesson Plan & Start Again?
+              </h3>
+              <p className="text-sm text-zinc-600 mt-1 leading-relaxed">
+                Are you sure you want to permanently delete{' '}
+                <strong className="text-zinc-900">"{activeSequence?.title}"</strong>?
+                This will clear its objectives, sequence progression, blueprints, and slides so you can begin fresh from Stage 1.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmResetModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-700 hover:bg-zinc-100 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleStartAgain}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 shadow-sm transition"
+              >
+                Yes, Delete & Start Fresh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Subtle Toast Notification */}
       {toast && (

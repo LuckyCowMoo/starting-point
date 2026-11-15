@@ -201,6 +201,21 @@ NON-NEGOTIABLE SLIDE WRITING & LAYOUT RULES:
      * ~90% Multiple Choice ("options": ["A. ...", "B. ...", "C. ...", "D. ..."]) with real distractors and "answer" starting with the letter (e.g. "B — ...").
    - **Slide 2 ("lesson-title-page")**: Concise topic "title" (<= 5 words), readable "lessonDate", conversational second-person "bigQuestion" hook, optional 2–3 "keyTermsStrip" terms, and "suggestedMediaQuery".
    - **When Standard Presets Do Not Fit**: Use "presetId": "custom" with non-overlapping "customCanvasElements" and an inline <svg viewBox="0 0 800 420"> diagram (such as a clean place-value grid, state table, or labelled architecture visual), or set "teacherDesignNote" if custom teacher artwork is needed.
+
+10. OVERRIDE BAD BLUEPRINT PRESETS & STRIP META PREFIXES:
+   - If a blueprint slide's "presetId" does not fit the number of items (e.g. "vocab-single-term-focus" used for 3 terms), upgrade the "presetId" to the appropriate preset (e.g. "vocabulary-spotlight"). Always strip blueprint prefixes like "Hinge Check:", "Task 1:", or "Plenary:" from the final pupil-facing "title".
+
+11. KEEP ALL SEQUENTIAL STEPS ON THE SAME SIDE OF THE COLOUR WAVE:
+   - On a slide with numbered steps (Step 1, Step 2, Step 3, etc.) or algorithm stages, ALL steps MUST be on the SAME layer and SAME side of the colour wave (always "layer": "top"). NEVER split sequential steps across the wave where some steps are on the light side and others are on the dark side!
+
+12. KEY VOCABULARY & DUAL-CODING LAYOUTS:
+   - For a single term definition: Use "presetId": "vocab-single-term-focus" with a prominent visual/diagram slot on the left and the bold term plus clear definition on the right.
+   - For multiple terms (2 to 4 terms): Use "presetId": "vocabulary-spotlight" (or "vocab-words-only") with 2–4 side-by-side card columns, each having a clean framed square/rectangular image or icon slot on top and the bold term plus definition directly underneath.
+   - Populate "keyTermsStrip" with array: [{"term": "Copyright", "definition": "A legal right preventing others from copying your work without permission."}, ...].
+
+13. COMPARISONS & PLACE VALUE GRIDS (NEVER MASH INTO A SINGLE RAW TEXT STRING):
+   - When presenting a comparison (e.g. WRONG vs CORRECT, Non-example vs Example, or Place Value grids), NEVER smash it into a single messy text paragraph.
+   - ALWAYS use "comparison-two-column" (with column: "left" for the misconception/wrong method and column: "right" for the correct rule) or use "presetId": "custom" with clean side-by-side cards or an inline <svg> place-value diagram.
 `.trim();
 
 function formatPriorUnitContext(seq: LessonSequence): string {
@@ -504,6 +519,10 @@ SUMMARY OF CLASSROOM-READY SLIDE RULES:
 - MANDATORY SLIDE 1 ("mwb-starter-quadrant") & SLIDE 2 ("lesson-title-page"):
   * Slide 1: "label" strictly "1".."4", direct questions <= 16 words without "From previous unit:" prefixes, options <= 5 words, retrieval ONLY (${lesson.lessonNumber === 1 ? 'from Previous Unit ONLY' : `from Lessons 1–${lesson.lessonNumber - 1} or Previous Unit`}), ~90% MC with "answer" starting with the letter (e.g. "B — ...").
   * Slide 2: concise topic "title" (<= 5 words), readable "lessonDate", second-person "bigQuestion" hook, optional 2–3 "keyTermsStrip" terms, and "suggestedMediaQuery".
+- OVERRIDE BAD BLUEPRINT PRESETS & STRIP META PREFIXES: If a blueprint slide's "presetId" does not fit the number of items (e.g. "vocab-single-term-focus" used for 3 terms), upgrade the "presetId" to the appropriate preset (e.g. "vocabulary-spotlight"). Always strip blueprint prefixes like "Hinge Check:", "Task 1:", or "Plenary:" from the final pupil-facing "title".
+- STEPS ON THE SAME SIDE OF THE WAVE: On a slide with sequential steps (Step 1, Step 2, etc.), ALL steps MUST be on the SAME layer and SAME side of the colour wave (always "layer": "top"). Never split sequential steps across the wave!
+- KEY VOCABULARY DUAL-CODING LAYOUTS: For 1 term use "vocab-single-term-focus" (visual on the left, term + definition on the right). For 2–4 terms use "vocabulary-spotlight" (side-by-side columns with a framed visual slot on top and bold term + definition underneath).
+- COMPARISONS & GRIDS: For comparisons (WRONG vs CORRECT) or place-value grids, ALWAYS use "comparison-two-column" (left = misconception, right = correct) or clean side-by-side cards—NEVER smash grids into a single messy inline text string.
 - Choose an appropriate "waveVariant" from: ${waveKeys}.
 
 Return ONLY valid JSON:

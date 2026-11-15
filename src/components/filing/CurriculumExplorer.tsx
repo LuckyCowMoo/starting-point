@@ -222,18 +222,22 @@ export const CurriculumExplorer: React.FC<CurriculumExplorerProps> = ({
                               </span>
                             </div>
                           </div>
-                          {workspace.sequences.length > 1 && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (
+                                window.confirm(
+                                  `Delete lesson sequence "${seq.title}"? This cannot be undone.`
+                                )
+                              ) {
                                 onDeleteSequence(seq.id);
-                              }}
-                              title="Delete sequence"
-                              className="opacity-0 group-hover:opacity-100 p-1 rounded text-zinc-400 hover:text-rose-600 transition"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          )}
+                              }
+                            }}
+                            title="Delete sequence"
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded text-zinc-400 hover:text-rose-600 transition"
+                          >
+                            <Trash2 size={12} />
+                          </button>
                         </div>
 
                         {/* Individual Lessons under active sequence */}

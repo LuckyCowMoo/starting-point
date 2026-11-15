@@ -230,7 +230,13 @@ export interface SlideData {
   bodyBlocks: SlideTextBlock[];
   starterQuadrants?: StarterQuadrant[];
   routineIcons: RoutineIconType[];
-  keyTermsStrip?: { term: string; definition: string }[];
+  keyTermsStrip?: {
+    term: string;
+    definition: string;
+    imageUrl?: string;
+    svgCode?: string;
+    icon?: string;
+  }[];
   mediaItem?: SlideMediaItem;
   customCanvasElements?: BespokeCanvasElement[];
   elementLayouts?: Record<string, ElementBoxOverride>;

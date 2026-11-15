@@ -1088,6 +1088,35 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     onCommit?: (next: string) => void
   ) => {
     const renderFormatted = () => {
+      // Clean comparison callout when AI attempts inline WRONG vs CORRECT tables
+      if (/WRONG[:\s]/i.test(text) && /CORRECT[:\s]/i.test(text)) {
+        const parts = text.split(/(?=CORRECT[:\s])/i);
+        const wrongPart = parts[0]?.replace(/^•\s*/, '').trim() || '';
+        const correctPart = parts[1]?.replace(/^•\s*/, '').trim() || '';
+        return (
+          <div className="grid grid-cols-2 gap-4 my-2">
+            <div className="p-4.5 rounded-2xl bg-rose-50/95 border-2 border-rose-300 text-rose-950 space-y-2 shadow-xs">
+              <div className="text-[17px] font-black uppercase tracking-wider text-rose-700 flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-rose-500 inline-block" />
+                Misconception / Non-Example
+              </div>
+              <p className="text-[26px] leading-snug font-bold font-mono whitespace-pre-line">
+                {wrongPart}
+              </p>
+            </div>
+            <div className="p-4.5 rounded-2xl bg-emerald-50/95 border-2 border-emerald-300 text-emerald-950 space-y-2 shadow-xs">
+              <div className="text-[17px] font-black uppercase tracking-wider text-emerald-700 flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
+                Correct Method / Rule
+              </div>
+              <p className="text-[26px] leading-snug font-bold font-mono whitespace-pre-line">
+                {correctPart}
+              </p>
+            </div>
+          </div>
+        );
+      }
+
       const lines = text
         .split(/\n+/)
         .map((l) => l.trim())
@@ -2221,21 +2250,66 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         const focusBoxed = Boolean(focusOverride?.boxed);
 
         return (
-          <div className={`relative z-20 flex-1 flex gap-10 min-h-0 ${contentPad}`}>
-            <div className="w-[820px] shrink-0 flex flex-col justify-center gap-6">
+          <div className={`relative z-20 flex-1 flex items-center gap-14 min-h-0 ${contentPad}`}>
+            {/* Left Column: Prominent Visual Frame (Matching Image 2) */}
+            <div className="w-[520px] shrink-0 flex items-center justify-center">
+              <div
+                className="w-full h-[520px] rounded-3xl border-2 border-zinc-900 bg-white shadow-md overflow-hidden flex items-center justify-center p-6 relative cursor-pointer group hover:border-emerald-600 transition"
+                onClick={() => {
+                  if (editable && !isThumbnail && onOpenMediaPicker) {
+                    onOpenMediaPicker('vocab-media-0');
+                  }
+                }}
+              >
+                {effectiveMedia?.url || (focus as any).imageUrl ? (
+                  <img
+                    src={effectiveMedia?.url || (focus as any).imageUrl}
+                    alt={focus.term}
+                    className="w-full h-full object-contain"
+                  />
+                ) : effectiveMedia?.svgCode || (focus as any).svgCode ? (
+                  <div
+                    dangerouslySetInnerHTML={{
+                      __html: effectiveMedia?.svgCode || (focus as any).svgCode || '',
+                    }}
+                    className="w-full h-full p-4 flex items-center justify-center"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-4 text-center p-4">
+                    <DualCodeBadgeControl
+                      iconId={slide.bodyBlocks[0]?.dualCodeIcon || 'concept'}
+                      accentColor={neutralAccent}
+                      onDarkSurface={false}
+                      editable={false}
+                    />
+                    <span className="text-sm font-semibold text-zinc-500 group-hover:text-emerald-700">
+                      Click to choose term visual
+                    </span>
+                  </div>
+                )}
+                {editable && !isThumbnail && onOpenMediaPicker && (
+                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 bg-zinc-900/80 text-white p-2 rounded-xl transition text-xs font-bold flex items-center gap-1">
+                    <ImagePlus size={14} /> Change Visual
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right Column: Term & Definition (Matching Image 2) */}
+            <div className="flex-1 flex flex-col justify-center gap-6 min-w-0">
               {placeSlot(
                 'slot-vocab-focus',
                 <div
                   className={
                     focusBoxed
-                      ? `rounded-3xl p-10 border-l-[12px] shadow-lg space-y-5 ${
+                      ? `rounded-3xl p-10 border-l-[12px] shadow-lg space-y-6 ${
                           focusOnDark
                             ? 'bg-white/14 backdrop-blur-md border-y-2 border-r-2 border-white/30'
                             : 'bg-white/95 border-y-2 border-r-2'
                         }`
                       : hideWaveBackground
-                      ? 'rounded-2xl p-8 border-2 border-dashed border-slate-300 bg-white/65 space-y-4'
-                      : 'border-l-[10px] pl-7 py-2 space-y-4'
+                      ? 'rounded-2xl p-8 border-2 border-dashed border-slate-300 bg-white/65 space-y-5'
+                      : 'border-l-[10px] pl-8 py-3 space-y-5'
                   }
                   style={
                     focusBoxed
@@ -2248,37 +2322,30 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                       : undefined
                   }
                 >
-                  <div className="flex items-center gap-4">
-                    <DualCodeBadgeControl
-                      iconId={slide.bodyBlocks[0]?.dualCodeIcon || 'concept'}
-                      accentColor={neutralAccent}
-                      onDarkSurface={focusOnDark}
-                      editable={false}
-                    />
-                    <h2
-                      className="text-[54px] font-extrabold leading-tight tracking-tight"
-                      style={{ color: focusOnDark ? '#FFFFFF' : neutralDark }}
-                    >
-                      <InlineEditableText
-                        value={focus.term}
-                        editable={editable && !isThumbnail}
-                        onCommit={(next) => {
-                          if (slide.keyTermsStrip?.length) {
-                            onUpdateSlide?.({
-                              keyTermsStrip: slide.keyTermsStrip.map((t, idx) =>
-                                idx === 0 ? { ...t, term: next } : t
-                              ),
-                            });
-                          } else if (slide.bodyBlocks[0]) {
-                            updateBlock(slide.bodyBlocks[0].id, { heading: next });
-                          }
-                        }}
-                      />
-                    </h2>
-                  </div>
-                  <p
-                    className="text-[36px] leading-[1.38] font-medium"
+                  <h2
+                    className="text-[58px] font-extrabold leading-tight tracking-tight"
                     style={{ color: focusOnDark ? '#FFFFFF' : neutralDark }}
+                  >
+                    <InlineEditableText
+                      value={focus.term ? `${focus.term}:` : ''}
+                      editable={editable && !isThumbnail}
+                      onCommit={(next) => {
+                        const clean = next.replace(/:$/, '').trim();
+                        if (slide.keyTermsStrip?.length) {
+                          onUpdateSlide?.({
+                            keyTermsStrip: slide.keyTermsStrip.map((t, idx) =>
+                              idx === 0 ? { ...t, term: clean } : t
+                            ),
+                          });
+                        } else if (slide.bodyBlocks[0]) {
+                          updateBlock(slide.bodyBlocks[0].id, { heading: clean });
+                        }
+                      }}
+                    />
+                  </h2>
+                  <p
+                    className="text-[36px] leading-[1.42] font-medium"
+                    style={{ color: focusOnDark ? 'rgba(255,255,255,0.95)' : neutralDark }}
                   >
                     <InlineEditableText
                       value={focus.definition}
@@ -2308,138 +2375,139 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               )}
               {noteBlocks.map((b, i) => renderCard(b, i))}
             </div>
-
-            <div className="flex-1 flex items-center justify-center min-w-0">
-              <div className="h-[670px] w-full flex items-center justify-center">
-                {renderMediaFrame(
-                  effectiveMedia,
-                  'w-full h-full',
-                  'Dual-Coding Term Visual',
-                  bottomOnDark
-                )}
-              </div>
-            </div>
           </div>
         );
       }
 
       const isWordsOnly = slide.presetId === 'vocab-words-only';
+      const displayTerms = terms.slice(0, 4);
+      const colCount = Math.max(1, Math.min(4, displayTerms.length));
+
       return (
-        <div className={`relative z-20 flex-1 flex gap-10 min-h-0 ${contentPad}`}>
-          <div className="w-[860px] shrink-0 flex flex-col justify-center gap-4 min-h-0">
-            {terms.slice(0, 6).map((kt, i) => {
+        <div className={`relative z-20 flex-1 flex flex-col justify-center min-h-0 ${contentPad}`}>
+          <div
+            className="grid gap-8 w-full max-w-[1720px] mx-auto items-stretch"
+            style={{
+              gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))`,
+            }}
+          >
+            {displayTerms.map((kt, i) => {
               const slotId = `slot-vocab-${i}`;
               const rowOverride = slide.elementLayouts?.[slotId];
-              const rowOnDark = rowOverride?.layer ? rowOverride.layer === 'bottom' : topOnDark;
-              const rowBoxed = Boolean(rowOverride?.boxed);
-              const blockIcon = slide.bodyBlocks[i]?.dualCodeIcon || 'concept';
-              const compactRow = terms.length >= 5;
+              const cardOnDark = rowOverride?.layer ? rowOverride.layer === 'bottom' : topOnDark;
+              const cardBoxed = rowOverride?.boxed !== undefined ? rowOverride.boxed : false;
+              const termImage = (kt as any).imageUrl || (i === 0 && effectiveMedia?.url);
+              const termSvg = (kt as any).svgCode || (i === 0 && effectiveMedia?.svgCode);
 
-              return placeSlot(
-                slotId,
-                <div
-                  className={`flex items-start gap-4 ${
-                    rowBoxed
-                      ? `rounded-2xl border-2 px-6 ${
-                          compactRow ? 'py-3.5' : 'py-4.5'
-                        } shadow-sm ${
-                          rowOnDark
-                            ? 'bg-white/14 backdrop-blur-md border-white/30'
-                            : 'bg-white/95'
-                        }`
-                      : hideWaveBackground
-                      ? `rounded-2xl border-2 border-dashed border-slate-300 px-5 ${
-                          compactRow ? 'py-3' : 'py-4'
-                        } bg-white/60`
-                      : `px-2 ${compactRow ? 'py-2' : 'py-2.5'}`
-                  }`}
-                  style={
-                    rowBoxed && !rowOnDark ? { borderColor: neutralBorder } : undefined
-                  }
-                >
-                  <DualCodeBadgeControl
-                    iconId={blockIcon}
-                    accentColor={neutralAccent}
-                    onDarkSurface={rowOnDark}
-                    editable={false}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div
-                      className={`${
-                        compactRow ? 'text-[31px]' : 'text-[35px]'
-                      } font-extrabold leading-tight`}
-                      style={{ color: rowOnDark ? '#FFFFFF' : neutralAccent }}
-                    >
-                      <InlineEditableText
-                        value={kt.term}
-                        editable={editable && !isThumbnail}
-                        onCommit={(next) => {
-                          if (slide.keyTermsStrip?.length) {
-                            onUpdateSlide?.({
-                              keyTermsStrip: slide.keyTermsStrip.map((item, idx) =>
-                                idx === i ? { ...item, term: next } : item
-                              ),
-                            });
-                          } else if (slide.bodyBlocks[i]) {
-                            updateBlock(slide.bodyBlocks[i].id, { heading: next });
-                          }
-                        }}
+              const innerCard = (
+                <div className="flex flex-col h-full space-y-4">
+                  {/* Top Image Box (Matching Image 1: Framed Container With Dual-Coding Visual) */}
+                  <div
+                    className="w-full h-[280px] rounded-2xl border-2 border-zinc-900 bg-white shadow-sm overflow-hidden flex items-center justify-center p-3 relative cursor-pointer group hover:border-emerald-600 transition"
+                    onClick={() => {
+                      if (editable && !isThumbnail && onOpenMediaPicker) {
+                        onOpenMediaPicker(`vocab-media-${i}`);
+                      }
+                    }}
+                    title="Click to choose visual for this term"
+                  >
+                    {termImage ? (
+                      <img
+                        src={termImage}
+                        alt={kt.term}
+                        className="w-full h-full object-contain"
                       />
-                    </div>
-                    {isWordsOnly ? (
+                    ) : termSvg ? (
                       <div
-                        className={`mt-2.5 border-b-2 border-dashed ${
-                          compactRow ? 'h-7' : 'h-10'
-                        } ${rowOnDark ? 'border-white/40' : 'border-zinc-400/70'}`}
+                        dangerouslySetInnerHTML={{ __html: termSvg }}
+                        className="w-full h-full p-2 flex items-center justify-center"
                       />
                     ) : (
-                      <div
-                        className={`mt-1 ${
-                          compactRow ? 'text-[24px]' : 'text-[27px]'
-                        } leading-snug font-medium`}
-                        style={{
-                          color: rowOnDark ? 'rgba(255,255,255,0.92)' : neutralDark,
-                        }}
+                      <div className="flex flex-col items-center justify-center gap-3 text-center p-2">
+                        <DualCodeBadgeControl
+                          iconId={slide.bodyBlocks[i]?.dualCodeIcon || 'concept'}
+                          accentColor={neutralAccent}
+                          onDarkSurface={false}
+                          editable={false}
+                        />
+                        <span className="text-xs font-semibold text-zinc-500 group-hover:text-emerald-700">
+                          Click to add image / diagram
+                        </span>
+                      </div>
+                    )}
+                    {editable && !isThumbnail && onOpenMediaPicker && (
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-zinc-900/80 text-white p-1.5 rounded-lg transition text-[11px] font-bold flex items-center gap-1">
+                        <ImagePlus size={12} /> Visual
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bottom Term & Definition Area (Matching Image 1: Bold Term - Definition) */}
+                  <div className="flex-1 text-center px-1">
+                    <p
+                      className="text-[25px] leading-snug font-medium"
+                      style={{ color: cardOnDark ? '#FFFFFF' : neutralDark }}
+                    >
+                      <strong
+                        className="font-extrabold mr-1.5"
+                        style={{ color: cardOnDark ? '#FFFFFF' : neutralAccent }}
                       >
                         <InlineEditableText
-                          value={kt.definition}
+                          value={kt.term}
                           editable={editable && !isThumbnail}
-                          multiline
                           onCommit={(next) => {
                             if (slide.keyTermsStrip?.length) {
                               onUpdateSlide?.({
                                 keyTermsStrip: slide.keyTermsStrip.map((item, idx) =>
-                                  idx === i ? { ...item, definition: next } : item
+                                  idx === i ? { ...item, term: next } : item
                                 ),
                               });
                             } else if (slide.bodyBlocks[i]) {
-                              updateBlock(slide.bodyBlocks[i].id, { content: next });
+                              updateBlock(slide.bodyBlocks[i].id, { heading: next });
                             }
                           }}
                         />
-                      </div>
+                      </strong>
+                      {!isWordsOnly && (
+                        <span>
+                          –{' '}
+                          <InlineEditableText
+                            value={kt.definition}
+                            editable={editable && !isThumbnail}
+                            multiline
+                            onCommit={(next) => {
+                              if (slide.keyTermsStrip?.length) {
+                                onUpdateSlide?.({
+                                  keyTermsStrip: slide.keyTermsStrip.map((item, idx) =>
+                                    idx === i ? { ...item, definition: next } : item
+                                  ),
+                                });
+                              } else if (slide.bodyBlocks[i]) {
+                                updateBlock(slide.bodyBlocks[i].id, { content: next });
+                              }
+                            }}
+                          />
+                        </span>
+                      )}
+                    </p>
+                    {isWordsOnly && (
+                      <div
+                        className={`mt-4 border-b-2 border-dashed h-8 w-4/5 mx-auto ${
+                          cardOnDark ? 'border-white/40' : 'border-zinc-400/80'
+                        }`}
+                      />
                     )}
                   </div>
-                </div>,
-                {
-                  showBoxToggle: true,
-                  showLayerToggle: true,
-                  isBoxed: rowBoxed,
-                  isBottomLayer: rowOnDark,
-                }
+                </div>
               );
-            })}
-          </div>
 
-          <div className="flex-1 flex items-center justify-center min-w-0">
-            <div className="h-[670px] w-full flex items-center justify-center">
-              {renderMediaFrame(
-                effectiveMedia,
-                'w-full h-full',
-                'Dual-Coding Vocabulary Visual',
-                bottomOnDark
-              )}
-            </div>
+              return placeSlot(slotId, innerCard, {
+                showBoxToggle: true,
+                showLayerToggle: true,
+                isBoxed: cardBoxed,
+                isBottomLayer: cardOnDark,
+              });
+            })}
           </div>
         </div>
       );
@@ -2504,8 +2572,29 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       );
     }
 
-    const topBlocks = slide.bodyBlocks.filter((b) => b.layer !== 'bottom');
-    const bottomBlocks = slide.bodyBlocks.filter((b) => b.layer === 'bottom');
+    // Ensure sequential steps (Step 1, Step 2, 1., 2., etc.) stay on the SAME layer ('top')
+    const hasSequentialSteps = slide.bodyBlocks.some(
+      (b) =>
+        b.style === 'step' ||
+        /^(Step\s*\d+|\d+[\.\)])/i.test(b.heading || '') ||
+        /^(Step\s*\d+|\d+[\.\)])/i.test(b.content.trim())
+    );
+
+    const normalizedBlocks = hasSequentialSteps
+      ? slide.bodyBlocks.map((b) => {
+          const isStep =
+            b.style === 'step' ||
+            /^(Step\s*\d+|\d+[\.\)])/i.test(b.heading || '') ||
+            /^(Step\s*\d+|\d+[\.\)])/i.test(b.content.trim());
+          if (isStep && b.layer === 'bottom') {
+            return { ...b, layer: 'top' as const };
+          }
+          return b;
+        })
+      : slide.bodyBlocks;
+
+    const topBlocks = normalizedBlocks.filter((b) => b.layer !== 'bottom');
+    const bottomBlocks = normalizedBlocks.filter((b) => b.layer === 'bottom');
     const isDualCodingLayout =
       slide.presetId === 'split-concept-dual-code' ||
       slide.presetId === 'worked-example-steps';
@@ -2514,7 +2603,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     const showRightColumn =
       bottomBlocks.length > 0 || hasBoxedMedia || hasFullBottomImage || isDualCodingLayout;
     const leftRenderBlocks = isDualCodingLayout && (hasBoxedMedia || !bottomBlocks.length)
-      ? slide.bodyBlocks
+      ? normalizedBlocks
       : topBlocks;
 
     return (

@@ -197,22 +197,61 @@ export async function runStage4SlidesGeneration(
       lesson.slidesBlueprint.find((b) => b.id === s.blueprintId) ||
       lesson.slidesBlueprint.find((b) => b.slideNumber === s.slideNumber) ||
       lesson.slidesBlueprint[idx];
-    const preset = SLIDE_PRESETS.find((p) => p.id === (s.presetId || bp?.presetId));
     const existing = targetSlideId
       ? lesson.slidesData.find((es) => es.id === targetSlideId)
       : lesson.slidesData[idx];
+
+    // Strip blueprint prefixes like "Hinge Check:", "Task 1:", "Plenary:", "Activity:"
+    let cleanTitle = (s.title || bp?.title || `Slide ${idx + 1}`).trim();
+    cleanTitle = cleanTitle.replace(
+      /^(Hinge Check|Check|Task \d+|Task|Plenary|Starter|Exit Ticket|Activity \d+|Activity)\s*[:\-–—]\s*/i,
+      ''
+    );
+
+    // Let Stage 4 upgrade bad blueprint presets (e.g. vocab-single-term-focus with >1 terms -> vocabulary-spotlight)
+    let chosenPreset = s.presetId || bp?.presetId || 'split-concept-dual-code';
+    const termCount = s.keyTermsStrip?.length || s.bodyBlocks?.length || 0;
+    if (chosenPreset === 'vocab-single-term-focus' && termCount > 1) {
+      chosenPreset = 'vocabulary-spotlight';
+    } else if (
+      (chosenPreset === 'vocabulary-spotlight' || chosenPreset === 'vocab-words-only') &&
+      termCount === 1
+    ) {
+      chosenPreset = 'vocab-single-term-focus';
+    }
+
+    const preset = SLIDE_PRESETS.find((p) => p.id === chosenPreset);
+
+    // Ensure all sequential steps (Step 1, Step 2, etc.) stay on the SAME layer ('top')
+    const hasSequentialSteps = (s.bodyBlocks || []).some(
+      (b) =>
+        b.style === 'step' ||
+        /^(Step\s*\d+|\d+[\.\)])/i.test(b.heading || '') ||
+        /^(Step\s*\d+|\d+[\.\)])/i.test(b.content.trim())
+    );
+
+    const cleanedBlocks = (s.bodyBlocks || []).map((b) => {
+      const isStep =
+        b.style === 'step' ||
+        /^(Step\s*\d+|\d+[\.\)])/i.test(b.heading || '') ||
+        /^(Step\s*\d+|\d+[\.\)])/i.test(b.content.trim());
+      if (hasSequentialSteps && isStep && b.layer === 'bottom') {
+        return { ...b, layer: 'top' as const };
+      }
+      return b;
+    });
 
     return {
       id: existing?.id || `sl-${lesson.lessonNumber}-${idx + 1}-${Date.now()}`,
       blueprintId: bp?.id || s.blueprintId || `bp-${idx + 1}`,
       slideNumber: s.slideNumber ?? bp?.slideNumber ?? idx + 1,
       phase: s.phase || bp?.phase || 'explanation',
-      presetId: s.presetId || bp?.presetId || 'split-concept-dual-code',
+      presetId: chosenPreset,
       waveVariant: s.waveVariant || preset?.recommendedWave || 'corner-cavern-tr',
-      title: s.title || bp?.title || `Slide ${idx + 1}`,
+      title: cleanTitle,
       subtitle: s.subtitle,
       bigQuestion: s.bigQuestion,
-      bodyBlocks: s.bodyBlocks || [],
+      bodyBlocks: cleanedBlocks,
       starterQuadrants: s.starterQuadrants,
       keyTermsStrip: s.keyTermsStrip,
       routineIcons: s.routineIcons || bp?.routineIcons || [],

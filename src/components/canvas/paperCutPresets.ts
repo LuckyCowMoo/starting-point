@@ -610,9 +610,12 @@ export function computeConformingPaperCut(
 
     const creamyBandPath = `${smoothSplineSegment(topCreamPts)} L ${revBotPts[0].x.toFixed(1)} ${revBotPts[0].y.toFixed(1)} ${smoothSplineSegment(revBotPts).replace(/^M/, 'L')} Z`;
 
+    const botWave3MinY = Math.min(...botWave3.map((p) => p.y));
+    const cavernY = clamp(Math.round(botWave3MinY - 15), 500, 1000);
+
     return {
       bottomBaseColor: baseFill,
-      bottomCavernRect: { x: 0, y: 0, w: 1920, h: 1080 },
+      bottomCavernRect: { x: 0, y: cavernY, w: 1920, h: 1080 - cavernY },
       controlPoints: botPts,
       layers: [
         {
@@ -751,9 +754,19 @@ export function computeConformingPaperCut(
 
     const insetScale = isSpotlight ? 1.55 : 0.62;
 
+    const loopMinX = Math.min(...baseLoop.map((p) => p.x));
+    const loopMaxX = Math.max(...baseLoop.map((p) => p.x));
+    const loopMinY = Math.min(...baseLoop.map((p) => p.y));
+    const loopMaxY = Math.max(...baseLoop.map((p) => p.y));
+    const pad = 15;
+    const cavernX = clamp(Math.round(loopMinX - pad), 0, 1920);
+    const cavernY = clamp(Math.round(loopMinY - pad), 0, 1080);
+    const cavernW = clamp(Math.round(loopMaxX - loopMinX + pad * 2), 200, 1920 - cavernX);
+    const cavernH = clamp(Math.round(loopMaxY - loopMinY + pad * 2), 200, 1080 - cavernY);
+
     return {
       bottomBaseColor: baseFill,
-      bottomCavernRect: { x: 0, y: 0, w: 1920, h: 1080 },
+      bottomCavernRect: { x: cavernX, y: cavernY, w: cavernW, h: cavernH },
       controlPoints: baseLoop,
       layers: [
         {
@@ -817,9 +830,14 @@ export function computeConformingPaperCut(
       return `${smoothSplineSegment(wPts)} L 2180 1340 L 2180 -260 Z`;
     };
 
+    const maxW3X = Math.max(
+      ...pts.map((p, i) => p.x - 128 - Math.sin(i * 0.95 + 0.4) * 18)
+    );
+    const cavernW = clamp(Math.round(maxW3X + 15), 300, 1500);
+
     return {
       bottomBaseColor: baseFill,
-      bottomCavernRect: { x: 0, y: 0, w: 460, h: 1080 },
+      bottomCavernRect: { x: 0, y: 0, w: cavernW, h: 1080 },
       controlPoints: pts,
       layers: [
         {
@@ -973,13 +991,18 @@ export function computeConformingPaperCut(
 
     const avgY = pts.reduce((a, b) => a + b.y, 0) / pts.length;
 
+    const cavernY = Math.max(0, Math.round(avgY - 60));
+    const samplePts = pts.filter((p) => p.y > 500);
+    const minCornerX = samplePts.length ? Math.min(...samplePts.map((p) => p.x)) : 750;
+    const cavernX = variant === 'corner-cavern-br' ? clamp(Math.round(minCornerX - 20), 300, 1400) : 0;
+
     return {
       bottomBaseColor: baseFill,
       bottomCavernRect: {
-        x: 0,
-        y: Math.max(0, avgY - 60),
-        w: 1920,
-        h: 1080 - Math.max(0, avgY - 60),
+        x: cavernX,
+        y: cavernY,
+        w: 1920 - cavernX,
+        h: 1080 - cavernY,
       },
       controlPoints: pts,
       layers: [
@@ -1127,12 +1150,21 @@ export function computeConformingPaperCut(
     }
   }
 
+  const w3Pts = pts.map((p, i) => ({
+    x: hasCustomPts
+      ? clamp(p.x + 138 + Math.sin(i * 1.0 + 0.4) * 18, -260, 2180)
+      : clamp(p.x + 138 + Math.sin(i * 1.0 + 0.4) * 18, 120, 1908),
+    y: p.y,
+  }));
+  const minW3X = Math.min(...w3Pts.map((p) => p.x));
+  const cavernX = clamp(Math.round(minW3X - 15), 360, 1500);
+
   return {
     bottomBaseColor: baseFill,
     bottomCavernRect: {
-      x: clamp(Math.min(minRightCavernX, avgRightCavernX) - 10, 460, 1300),
+      x: cavernX,
       y: 0,
-      w: 1920 - clamp(Math.min(minRightCavernX, avgRightCavernX) - 10, 460, 1300),
+      w: 1920 - cavernX,
       h: 1080,
     },
     controlPoints: pts,

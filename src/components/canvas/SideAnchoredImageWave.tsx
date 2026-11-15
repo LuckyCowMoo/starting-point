@@ -129,6 +129,20 @@ export const SideAnchoredImageWave: React.FC<SideAnchoredImageWaveProps> = ({
   const isRight = side === 'right';
   const shadowDir = isRight ? -1 : 1;
 
+  // Compute image bounding box cropped to the visible area inside the wave
+  // rather than the whole 1920x1080 canvas
+  const minPtsX = Math.min(...pts.map((p) => p.x));
+  const maxPtsX = Math.max(...pts.map((p) => p.x));
+  const minL1X = Math.min(...geom.layer1Pts.map((p) => p.x));
+  const maxL1X = Math.max(...geom.layer1Pts.map((p) => p.x));
+
+  // Small padding (25px) ensures spline overshoot is fully covered with image
+  const mainImgX = isRight ? Math.max(0, Math.floor(minPtsX - 25)) : 0;
+  const mainImgW = isRight ? 1920 - mainImgX : Math.min(1920, Math.ceil(maxPtsX + 25));
+
+  const l1ImgX = isRight ? Math.max(0, Math.floor(minL1X - 25)) : 0;
+  const l1ImgW = isRight ? 1920 - l1ImgX : Math.min(1920, Math.ceil(maxL1X + 25));
+
   // Background page colour blending targets:
   // Default creamy surface is #FAF6F0. If inverted, the page may be dark category layers.
   const pageBgColor = invert ? palette.layers[3] : '#FAF6F0';
@@ -273,26 +287,26 @@ export const SideAnchoredImageWave: React.FC<SideAnchoredImageWaveProps> = ({
               {/* Shifted continuation of the image */}
               <image
                 href={mediaItem.url}
-                x={0}
+                x={l1ImgX}
                 y={10}
-                width={1920}
+                width={l1ImgW}
                 height={1080}
                 preserveAspectRatio="xMidYMid slice"
                 opacity={0.7}
               />
               {/* Tint overlay blending closer to page color */}
               <rect
-                x={0}
+                x={l1ImgX}
                 y={0}
-                width={1920}
+                width={l1ImgW}
                 height={1080}
                 fill={softSurface}
                 opacity={0.45}
               />
               <rect
-                x={0}
+                x={l1ImgX}
                 y={0}
-                width={1920}
+                width={l1ImgW}
                 height={1080}
                 fill={categoryTone}
                 opacity={0.18}
@@ -322,16 +336,16 @@ export const SideAnchoredImageWave: React.FC<SideAnchoredImageWaveProps> = ({
             <g clipPath={`url(#side-img-clip-${uid})`}>
               <image
                 href={mediaItem.url}
-                x={0}
+                x={mainImgX}
                 y={0}
-                width={1920}
+                width={mainImgW}
                 height={1080}
                 preserveAspectRatio="xMidYMid slice"
               />
             </g>
           ) : hasImage && mediaItem?.type === 'svg-diagram' && mediaItem.svgCode ? (
             <g clipPath={`url(#side-img-clip-${uid})`}>
-              <foreignObject x={0} y={0} width={1920} height={1080}>
+              <foreignObject x={mainImgX} y={0} width={mainImgW} height={1080}>
                 <div
                   className="w-full h-full bg-white flex items-center justify-center p-8"
                   dangerouslySetInnerHTML={{ __html: mediaItem.svgCode }}

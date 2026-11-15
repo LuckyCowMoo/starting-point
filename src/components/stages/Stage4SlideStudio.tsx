@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
+  ClipboardPaste,
   Download,
   Eye,
   EyeOff,
@@ -129,6 +130,13 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
 
   const [historyPast, setHistoryPast] = useState<SlideData[][]>([]);
   const [historyFuture, setHistoryFuture] = useState<SlideData[][]>([]);
+  const [hoveredImageTarget, setHoveredImageTarget] = useState<string | null>(null);
+  const [pasteToast, setPasteToast] = useState<string | null>(null);
+
+  const showPasteToast = (msg: string) => {
+    setPasteToast(msg);
+    window.setTimeout(() => setPasteToast(null), 2800);
+  };
 
   const recordManualHistory = () => {
     if (!lesson) return;
@@ -166,13 +174,85 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
     });
   };
 
+  const applyPastedImage = (targetId: string, data: string, type: 'image' | 'svg') => {
+    recordManualHistory();
+    if (targetId.startsWith('vocab-media-')) {
+      const idx = parseInt(targetId.replace('vocab-media-', ''), 10);
+      const currentTerms = slide.keyTermsStrip || [];
+      if (currentTerms[idx]) {
+        updateActiveSlide({
+          keyTermsStrip: currentTerms.map((t, i) =>
+            i === idx
+              ? {
+                  ...t,
+                  imageUrl: type === 'image' ? data : undefined,
+                  svgCode: type === 'svg' ? data : undefined,
+                }
+              : t
+          ),
+        });
+      } else if (idx === 0) {
+        updateActiveSlide({
+          mediaItem: {
+            id: `media-${Date.now()}`,
+            type: type === 'svg' ? 'svg-diagram' : 'image',
+            title: 'Pasted Image',
+            url: type === 'image' ? data : undefined,
+            svgCode: type === 'svg' ? data : undefined,
+            cropFit: 'contain',
+            frameShape: 'clean',
+          },
+        });
+      }
+      showPasteToast(`Pasted image into Vocabulary Term ${idx + 1}!`);
+    } else if (
+      targetId &&
+      slide.customCanvasElements?.some((el) => el.id === targetId)
+    ) {
+      updateActiveSlide({
+        customCanvasElements: slide.customCanvasElements.map((el) =>
+          el.id === targetId
+            ? {
+                ...el,
+                kind: type === 'svg' ? 'diagram' : 'image',
+                svgCode: type === 'svg' ? data : undefined,
+                imageUrl: type === 'image' ? data : undefined,
+                heading: el.heading || 'Pasted Visual',
+              }
+            : el
+        ),
+      });
+      showPasteToast('Pasted image into slide element!');
+    } else {
+      updateActiveSlide({
+        hiddenElementIds: slide.hiddenElementIds?.filter((id) => id !== 'slot-media'),
+        mediaItem: {
+          id: `media-${Date.now()}`,
+          type: type === 'svg' ? 'svg-diagram' : 'image',
+          title: 'Pasted Image',
+          url: type === 'image' ? data : undefined,
+          svgCode: type === 'svg' ? data : undefined,
+          cropFit: slide.presetId === 'lesson-title-page' ? 'cover' : 'contain',
+          frameShape: 'clean',
+          placement: slide.presetId === 'lesson-title-page' ? 'fill-bottom-layer' : 'boxed-card',
+        },
+      });
+      showPasteToast('Pasted image into slide visual slot!');
+    }
+  };
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
       const tag = (activeEl?.tagName || '').toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || (activeEl as HTMLElement)?.isContentEditable) {
+      const isTextInput =
+        activeEl &&
+        (tag === 'input' || tag === 'textarea' || (activeEl as HTMLElement)?.isContentEditable);
+
+      if (isTextInput && !hoveredImageTarget) {
         return;
       }
+
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         if (e.shiftKey) {
           e.preventDefault();
@@ -184,11 +264,104 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         handleRedo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && hoveredImageTarget) {
+        // Fallback for Ctrl+V directly reading navigator clipboard
+        if (navigator.clipboard && navigator.clipboard.read) {
+          navigator.clipboard
+            .read()
+            .then(async (clipboardItems) => {
+              for (const item of clipboardItems) {
+                const imageType = item.types.find((t) => t.startsWith('image/'));
+                if (imageType) {
+                  const blob = await item.getType(imageType);
+                  const reader = new FileReader();
+                  reader.onload = (loadEvt) => {
+                    const dataUrl = loadEvt.target?.result as string;
+                    if (dataUrl) {
+                      applyPastedImage(hoveredImageTarget, dataUrl, 'image');
+                    }
+                  };
+                  reader.readAsDataURL(blob);
+                  e.preventDefault();
+                  return;
+                }
+              }
+            })
+            .catch(() => {
+              // Ignore clipboard read permission rejection; native paste event handles it
+            });
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [historyPast, historyFuture, lesson?.slidesData]);
+  }, [historyPast, historyFuture, lesson?.slidesData, hoveredImageTarget]);
+
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const activeEl = document.activeElement;
+      const tag = (activeEl?.tagName || '').toLowerCase();
+      const isTextInput =
+        activeEl &&
+        (tag === 'input' || tag === 'textarea' || (activeEl as HTMLElement)?.isContentEditable);
+
+      if (isTextInput && !hoveredImageTarget) {
+        return;
+      }
+
+      const target =
+        hoveredImageTarget ||
+        (selectedElementId &&
+        slide.customCanvasElements?.some(
+          (el) => el.id === selectedElementId && (el.kind === 'image' || el.kind === 'diagram')
+        )
+          ? selectedElementId
+          : null);
+
+      if (!target) return;
+
+      const items = e.clipboardData?.items;
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.type.indexOf('image') !== -1) {
+            e.preventDefault();
+            const file = item.getAsFile();
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (loadEvt) => {
+                const dataUrl = loadEvt.target?.result as string;
+                if (dataUrl) {
+                  applyPastedImage(target, dataUrl, 'image');
+                }
+              };
+              reader.readAsDataURL(file);
+              return;
+            }
+          }
+        }
+      }
+
+      const text = e.clipboardData?.getData('text') || '';
+      const trimmed = text.trim();
+      if (/^<svg[\s>]/i.test(trimmed) && trimmed.endsWith('</svg>')) {
+        e.preventDefault();
+        applyPastedImage(target, trimmed, 'svg');
+        return;
+      }
+      if (
+        /^data:image\/[a-z0-9.+-]+;base64,/i.test(trimmed) ||
+        /^https?:\/\/.+\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(trimmed)
+      ) {
+        e.preventDefault();
+        applyPastedImage(target, trimmed, 'image');
+        return;
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [hoveredImageTarget, selectedElementId, slide]);
 
   const handleDeleteCurrentLesson = () => {
     if (!lesson) return;
@@ -774,6 +947,8 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                 setMediaTargetElementId(targetElId || null);
                 setMediaOpen(true);
               }}
+              hoveredImageTarget={hoveredImageTarget}
+              onHoverImageTarget={setHoveredImageTarget}
             />
           </div>
 
@@ -1648,6 +1823,14 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
           }
         }}
       />
+
+      {/* Toast Notification for Clipboard Image Paste */}
+      {pasteToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-zinc-900 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-zinc-700 text-xs font-bold flex items-center gap-2 animate-reveal-pop">
+          <ClipboardPaste size={15} className="text-emerald-400" />
+          <span>{pasteToast}</span>
+        </div>
+      )}
     </div>
   );
 };

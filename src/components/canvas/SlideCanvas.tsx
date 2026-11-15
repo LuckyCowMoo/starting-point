@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Check,
   CheckCircle2,
+  ClipboardPaste,
   Clock,
   Code2,
   Database,
@@ -135,6 +136,8 @@ interface SlideCanvasProps {
   onSelectElement?: (id: string | null) => void;
   onUpdateSlide?: (patch: Partial<SlideData>) => void;
   onOpenMediaPicker?: (targetElementId?: string) => void;
+  hoveredImageTarget?: string | null;
+  onHoverImageTarget?: (targetId: string | null) => void;
 }
 
 interface InlineEditableProps {
@@ -607,6 +610,8 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   onSelectElement,
   onUpdateSlide,
   onOpenMediaPicker,
+  hoveredImageTarget,
+  onHoverImageTarget,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasBoxRef = useRef<HTMLDivElement>(null);
@@ -1214,11 +1219,17 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         <button
           type="button"
           disabled={!canPick}
+          onMouseEnter={() => {
+            if (canPick) onHoverImageTarget?.(slotId);
+          }}
+          onMouseLeave={() => {
+            if (canPick) onHoverImageTarget?.(null);
+          }}
           onClick={(e) => {
             e.stopPropagation();
-            if (canPick) onOpenMediaPicker?.();
+            if (canPick) onOpenMediaPicker?.(slotId);
           }}
-          className={`${sizeClass} rounded-3xl border-4 border-dashed flex flex-col items-center justify-center p-10 text-center transition ${
+          className={`relative group ${sizeClass} rounded-3xl border-4 border-dashed flex flex-col items-center justify-center p-10 text-center transition ${
             slotOnDark
               ? canPick
                 ? 'cursor-pointer border-white/70 bg-white/18 hover:bg-white/28 text-white shadow-2xl backdrop-blur-xs'
@@ -1228,6 +1239,12 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               : 'cursor-default border-zinc-300 bg-white/60 text-zinc-600'
           }`}
         >
+          {canPick && (
+            <div className="absolute top-4 right-4 bg-zinc-900/90 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg border border-white/20 opacity-0 group-hover:opacity-100 transition animate-fade-in pointer-events-none z-10">
+              <ClipboardPaste size={14} className="text-emerald-400" />
+              <span>Press Ctrl+V to paste image</span>
+            </div>
+          )}
           <div
             className={`w-24 h-24 rounded-3xl flex items-center justify-center mb-5 shadow-md ${
               slotOnDark ? 'bg-white/20' : 'bg-slate-200/80 text-slate-700'
@@ -1240,7 +1257,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           </p>
           {canPick && (
             <p className="mt-3 text-[24px] font-medium opacity-90 max-w-md">
-              Click to choose a photo or diagram
+              Click to choose • Press Ctrl+V to paste
             </p>
           )}
         </button>
@@ -1248,17 +1265,29 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     } else {
       inner = (
         <div
+          onMouseEnter={() => {
+            if (canPick) onHoverImageTarget?.(slotId);
+          }}
+          onMouseLeave={() => {
+            if (canPick) onHoverImageTarget?.(null);
+          }}
           onClick={(e) => {
             if (canPick) {
               e.stopPropagation();
-              onOpenMediaPicker?.();
+              onOpenMediaPicker?.(slotId);
             }
           }}
-          title={canPick ? 'Click to change visual or SVG diagram' : undefined}
-          className={`relative rounded-3xl overflow-hidden shadow-2xl bg-white border-4 border-white/90 flex flex-col w-full h-full flex-1 ${
+          title={canPick ? 'Click to change visual or press Ctrl+V to paste new image' : undefined}
+          className={`relative group rounded-3xl overflow-hidden shadow-2xl bg-white border-4 border-white/90 flex flex-col w-full h-full flex-1 ${
             canPick ? 'cursor-pointer transition' : ''
           }`}
         >
+          {canPick && (
+            <div className="absolute top-3 right-3 bg-zinc-900/85 text-white px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md opacity-0 group-hover:opacity-100 transition pointer-events-none z-10">
+              <ClipboardPaste size={13} className="text-emerald-400" />
+              <span>Ctrl+V to replace</span>
+            </div>
+          )}
           {media.type === 'svg-diagram' && media.svgCode ? (
             <div
               className="flex-1 w-full h-full flex items-center justify-center p-5 bg-white overflow-hidden"
@@ -2254,6 +2283,12 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
             {/* Left Column: Prominent Visual Frame (Matching Image 2) */}
             <div className="w-[520px] shrink-0 flex items-center justify-center">
               <div
+                onMouseEnter={() => {
+                  if (editable && !isThumbnail) onHoverImageTarget?.('vocab-media-0');
+                }}
+                onMouseLeave={() => {
+                  if (editable && !isThumbnail) onHoverImageTarget?.(null);
+                }}
                 className="w-full h-[520px] rounded-3xl border-2 border-zinc-900 bg-white shadow-md overflow-hidden flex items-center justify-center p-6 relative cursor-pointer group hover:border-emerald-600 transition"
                 onClick={() => {
                   if (editable && !isThumbnail && onOpenMediaPicker) {
@@ -2283,13 +2318,14 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                       editable={false}
                     />
                     <span className="text-sm font-semibold text-zinc-500 group-hover:text-emerald-700">
-                      Click to choose term visual
+                      Click or press Ctrl+V to add visual
                     </span>
                   </div>
                 )}
-                {editable && !isThumbnail && onOpenMediaPicker && (
-                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 bg-zinc-900/80 text-white p-2 rounded-xl transition text-xs font-bold flex items-center gap-1">
-                    <ImagePlus size={14} /> Change Visual
+                {editable && !isThumbnail && (
+                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 bg-zinc-900/90 text-white px-3 py-1.5 rounded-xl transition text-xs font-bold flex items-center gap-1.5 shadow-md pointer-events-none z-10 border border-white/20">
+                    <ClipboardPaste size={14} className="text-emerald-400" />
+                    <span>Press Ctrl+V to paste image</span>
                   </div>
                 )}
               </div>
@@ -2403,13 +2439,19 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 <div className="flex flex-col h-full space-y-4">
                   {/* Top Image Box (Matching Image 1: Framed Container With Dual-Coding Visual) */}
                   <div
+                    onMouseEnter={() => {
+                      if (editable && !isThumbnail) onHoverImageTarget?.(`vocab-media-${i}`);
+                    }}
+                    onMouseLeave={() => {
+                      if (editable && !isThumbnail) onHoverImageTarget?.(null);
+                    }}
                     className="w-full h-[280px] rounded-2xl border-2 border-zinc-900 bg-white shadow-sm overflow-hidden flex items-center justify-center p-3 relative cursor-pointer group hover:border-emerald-600 transition"
                     onClick={() => {
                       if (editable && !isThumbnail && onOpenMediaPicker) {
                         onOpenMediaPicker(`vocab-media-${i}`);
                       }
                     }}
-                    title="Click to choose visual for this term"
+                    title="Click or press Ctrl+V to add visual for this term"
                   >
                     {termImage ? (
                       <img
@@ -2431,13 +2473,14 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                           editable={false}
                         />
                         <span className="text-xs font-semibold text-zinc-500 group-hover:text-emerald-700">
-                          Click to add image / diagram
+                          Click or Ctrl+V to add image
                         </span>
                       </div>
                     )}
-                    {editable && !isThumbnail && onOpenMediaPicker && (
-                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-zinc-900/80 text-white p-1.5 rounded-lg transition text-[11px] font-bold flex items-center gap-1">
-                        <ImagePlus size={12} /> Visual
+                    {editable && !isThumbnail && (
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-zinc-900/90 text-white px-2.5 py-1 rounded-xl transition text-[11px] font-bold flex items-center gap-1 shadow-md pointer-events-none z-10 border border-white/20">
+                        <ClipboardPaste size={12} className="text-emerald-400" />
+                        <span>Ctrl+V to paste</span>
                       </div>
                     )}
                   </div>
@@ -2678,7 +2721,15 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       let node: React.ReactNode;
       if (el.kind === 'image') {
         node = el.imageUrl ? (
-          <div className="w-full h-full rounded-3xl overflow-hidden shadow-2xl border-4 border-white/90 bg-white">
+          <div
+            onMouseEnter={() => {
+              if (editable && !isThumbnail) onHoverImageTarget?.(el.id);
+            }}
+            onMouseLeave={() => {
+              if (editable && !isThumbnail) onHoverImageTarget?.(null);
+            }}
+            className="group relative w-full h-full rounded-3xl overflow-hidden shadow-2xl border-4 border-white/90 bg-white"
+          >
             <img
               src={el.imageUrl}
               alt={el.heading || 'Slide visual'}
@@ -2686,27 +2737,45 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 el.cropFit === 'contain' ? 'object-contain bg-white' : 'object-cover'
               }`}
             />
+            {editable && !isThumbnail && (
+              <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 bg-zinc-900/90 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg border border-white/20 transition pointer-events-none z-10">
+                <ClipboardPaste size={13} className="text-emerald-400" />
+                <span>Ctrl+V to replace</span>
+              </div>
+            )}
           </div>
         ) : (
           <button
             type="button"
             disabled={!editable || isThumbnail}
+            onMouseEnter={() => {
+              if (editable && !isThumbnail) onHoverImageTarget?.(el.id);
+            }}
+            onMouseLeave={() => {
+              if (editable && !isThumbnail) onHoverImageTarget?.(null);
+            }}
             onClick={(e) => {
               e.stopPropagation();
               if (editable && !isThumbnail) onOpenMediaPicker?.(el.id);
             }}
-            className={`w-full h-full rounded-3xl border-4 border-dashed flex flex-col items-center justify-center p-6 text-center transition ${
+            className={`group relative w-full h-full rounded-3xl border-4 border-dashed flex flex-col items-center justify-center p-6 text-center transition ${
               onDark
                 ? 'border-white/65 bg-white/15 hover:bg-white/25 text-white'
                 : 'border-slate-400/75 bg-white/75 hover:bg-white text-slate-700'
             }`}
           >
+            {editable && !isThumbnail && (
+              <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 bg-zinc-900/90 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg border border-white/20 transition pointer-events-none animate-fade-in z-10">
+                <ClipboardPaste size={14} className="text-emerald-400" />
+                <span>Press Ctrl+V to paste image</span>
+              </div>
+            )}
             <ImagePlus size={44} className="mb-3 opacity-85" />
             <span className="text-[28px] font-extrabold leading-tight">
               {el.heading || 'Choose Image or Diagram'}
             </span>
             <span className="mt-1.5 text-[21px] font-medium opacity-80">
-              Click to search Pexels, Wikimedia, or SVG diagrams
+              Click to choose • Press Ctrl+V to paste
             </span>
           </button>
         );

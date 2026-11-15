@@ -126,7 +126,7 @@ STAGE 3 BLUEPRINT RULES:
 
 5. MANDATORY OPENING ROUTINE & PRESET SELECTION:
    - **Slide 1 MUST be the Starter** ("presetId": "mwb-starter-quadrant", "phase": "starter", "title": "Starter", ~4–5 mins), testing strictly previously taught material only (Lesson 1 = Previous Unit only; Lessons k>1 = Lessons 1..k-1 and Previous Unit).
-   - **Slide 2 MUST be the Lesson Title Page** ("presetId": "lesson-title-page", "phase": "explanation", ~1–2 mins).
+   - **Slide 2 MUST be the Lesson Title Page** ("presetId": "lesson-title-page", "phase": "explanation", ~1–2 mins). It must be clean and uncluttered: title, date, and visual image only—do not put key terms on the title page.
    - **Use Side-by-Side Column Presets for 3–4 Parallel Items**: When introducing 3–4 related concepts, units, properties, or summary takeaways, select "process-timeline-flow", "comparison-two-column", or "title-divider" (side-by-side cards with bold headers and 1-sentence captions) rather than vertical bullet lists.
    - **Use Vocabulary Presets Thoughtfully**: Use "vocab-words-only", "vocab-single-term-focus", or "vocabulary-spotlight" to dual-code key terms with visuals.
    - **Assign Visual Routine Icons**: Always populate "routineIcons" ("mwb-question", "write-in-books", "pair-discussion", "independent-task", "key-vocab", "extension-challenge", "silent-think") to signpost classroom routines visually—never write "(On MWBs)" or "(In Books)" in titles or summaries.
@@ -518,11 +518,11 @@ SUMMARY OF CLASSROOM-READY SLIDE RULES:
 - VISUAL ROUTINE ICONS ONLY: Never write "(On MWBs)" or "(In Books)" in titles, headings, or text—always use "routineIcons".
 - MANDATORY SLIDE 1 ("mwb-starter-quadrant") & SLIDE 2 ("lesson-title-page"):
   * Slide 1: "label" strictly "1".."4", direct questions <= 16 words without "From previous unit:" prefixes, options <= 5 words, retrieval ONLY (${lesson.lessonNumber === 1 ? 'from Previous Unit ONLY' : `from Lessons 1–${lesson.lessonNumber - 1} or Previous Unit`}), ~90% MC with "answer" starting with the letter (e.g. "B — ...").
-  * Slide 2: concise topic "title" (<= 5 words), readable "lessonDate", second-person "bigQuestion" hook, optional 2–3 "keyTermsStrip" terms, and "suggestedMediaQuery".
+  * Slide 2 (Lesson Title Page): Clean title page ONLY containing concise topic "title" (<= 5 words), readable "lessonDate" (e.g. "Thursday, 14 November 2026"), and a high-quality visual/diagram ("suggestedMediaQuery"). Do NOT include key terms on the title page.
 - OVERRIDE BAD BLUEPRINT PRESETS & STRIP META PREFIXES: If a blueprint slide's "presetId" does not fit the number of items (e.g. "vocab-single-term-focus" used for 3 terms), upgrade the "presetId" to the appropriate preset (e.g. "vocabulary-spotlight"). Always strip blueprint prefixes like "Hinge Check:", "Task 1:", or "Plenary:" from the final pupil-facing "title".
 - STEPS ON THE SAME SIDE OF THE WAVE: On a slide with sequential steps (Step 1, Step 2, etc.), ALL steps MUST be on the SAME layer and SAME side of the colour wave (always "layer": "top"). Never split sequential steps across the wave!
 - KEY VOCABULARY DUAL-CODING LAYOUTS: For 1 term use "vocab-single-term-focus" (visual on the left, term + definition on the right). For 2–4 terms use "vocabulary-spotlight" (side-by-side columns with a framed visual slot on top and bold term + definition underneath).
-- COMPARISONS & GRIDS: For comparisons (WRONG vs CORRECT) or place-value grids, ALWAYS use "comparison-two-column" (left = misconception, right = correct) or clean side-by-side cards—NEVER smash grids into a single messy inline text string.
+- TABLES & COMPARISONS: When presenting structured tabular information (binary/denary place value grids, truth tables, calculation steps, comparisons), use "tableData" with { "rows": X, "cols": Y, "headers": [...], "cells": [[...]] } or "customCanvasElements" with "kind": "table". Fill each cell with clean, concise content—NEVER smash grids into a single messy inline text string.
 - Choose an appropriate "waveVariant" from: ${waveKeys}.
 
 Return ONLY valid JSON:

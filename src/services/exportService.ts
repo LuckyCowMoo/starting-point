@@ -985,6 +985,54 @@ export async function generateLessonPptxBlob(
         }
       }
 
+      // Slide-level Table Data
+      if (slide.tableData) {
+        const tData = slide.tableData;
+        const tableRows: any[] = [];
+        if (tData.headers && tData.headers.length > 0) {
+          tableRows.push(
+            tData.headers.map((h) => ({
+              text: safeText(h),
+              options: {
+                fill: { color: 'E2E8F0' },
+                color: darkInkHex,
+                bold: true,
+                fontSize: 13,
+                fontFace: 'Plus Jakarta Sans',
+                align: 'center',
+                valign: 'middle',
+              },
+            }))
+          );
+        }
+        const numRows = Math.max(1, tData.rows || tData.cells?.length || 1);
+        const numCols = Math.max(1, tData.cols || tData.headers?.length || tData.cells?.[0]?.length || 1);
+        for (let r = 0; r < numRows; r++) {
+          const row = tData.cells?.[r] || [];
+          tableRows.push(
+            Array.from({ length: numCols }, (_, c) => ({
+              text: safeText(row[c] || ''),
+              options: {
+                fill: { color: r % 2 === 0 ? 'FFFFFF' : 'F8FAFC' },
+                color: darkInkHex,
+                fontSize: 12,
+                fontFace: 'Plus Jakarta Sans',
+                align: 'left',
+                valign: 'middle',
+              },
+            }))
+          );
+        }
+        pptSlide.addTable(tableRows, {
+          x: 1.2,
+          y: 2.2,
+          w: 10.9,
+          h: 4.5,
+          border: { pt: 1, color: borderHex },
+          autoPage: false,
+        });
+      }
+
       // Freeform & Custom Canvas Elements (supported on ALL presets!)
       if (slide.customCanvasElements && slide.customCanvasElements.length > 0) {
         for (const el of slide.customCanvasElements) {
@@ -999,7 +1047,54 @@ export async function generateLessonPptxBlob(
           const isBoxed =
             ov?.boxed !== undefined ? ov.boxed : Boolean(el.boxed);
 
-          if (el.kind === 'image' && el.imageUrl) {
+          if (el.kind === 'table' || el.tableData) {
+            const tData = el.tableData;
+            if (tData) {
+              const tableRows: any[] = [];
+              if (tData.headers && tData.headers.length > 0) {
+                tableRows.push(
+                  tData.headers.map((h) => ({
+                    text: safeText(h),
+                    options: {
+                      fill: { color: isDarkSurface ? '1E293B' : 'E2E8F0' },
+                      color: isDarkSurface ? 'FFFFFF' : darkInkHex,
+                      bold: true,
+                      fontSize: 12,
+                      fontFace: 'Plus Jakarta Sans',
+                      align: 'center',
+                      valign: 'middle',
+                    },
+                  }))
+                );
+              }
+              const numRows = Math.max(1, tData.rows || tData.cells?.length || 1);
+              const numCols = Math.max(1, tData.cols || tData.headers?.length || tData.cells?.[0]?.length || 1);
+              for (let r = 0; r < numRows; r++) {
+                const row = tData.cells?.[r] || [];
+                tableRows.push(
+                  Array.from({ length: numCols }, (_, c) => ({
+                    text: safeText(row[c] || ''),
+                    options: {
+                      fill: { color: isDarkSurface ? '0F172A' : (r % 2 === 0 ? 'FFFFFF' : 'F8FAFC') },
+                      color: isDarkSurface ? 'E2E8F0' : darkInkHex,
+                      fontSize: 11,
+                      fontFace: 'Plus Jakarta Sans',
+                      align: 'left',
+                      valign: 'middle',
+                    },
+                  }))
+                );
+              }
+              pptSlide.addTable(tableRows, {
+                x,
+                y,
+                w,
+                h,
+                border: { pt: 1, color: isDarkSurface ? '475569' : borderHex },
+                autoPage: false,
+              });
+            }
+          } else if (el.kind === 'image' && el.imageUrl) {
             const imgUri = await imageUrlToDataUrl(el.imageUrl);
             if (imgUri) {
               pptSlide.addImage({

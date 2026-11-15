@@ -20,10 +20,12 @@ import {
   LucideIcon,
   Move,
   Network,
+  Plus,
   Scale,
   Search,
   Sparkles,
   Square,
+  Table as TableIcon,
   Target,
   Trash2,
   Users,
@@ -38,8 +40,10 @@ import {
   PhasePalette,
   SlideData,
   SlideMediaItem,
+  SlideTableData,
   SlideTextBlock,
 } from '../../types/curriculum';
+import { SlideTable } from './SlideTable';
 import { PHASE_PALETTES } from '../../data/palettes';
 import { PaperCutRenderer } from './PaperCutRenderer';
 import {
@@ -2157,55 +2161,67 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
 
     return (
       <div className="relative z-20 h-full flex flex-row items-stretch px-20 py-14 gap-12">
-        {/* Left Top Sheet: Date, Huge Topic Title, Hook / Big Question, Key Terms */}
+        {/* Left Top Sheet: Clean Date & Huge Topic Title (and optional hook if explicitly set) */}
         <div
-          className={`flex-1 flex flex-col justify-between py-2 ${
+          className={`flex-1 flex flex-col justify-center gap-9 py-2 ${
             isLeftSpine ? 'pl-[380px]' : ''
           }`}
         >
           <div className="space-y-7 max-w-[840px]">
-            {placeSlot(
-              'slot-date',
-              <div
-                className={
-                  dateBoxed
-                    ? `inline-flex items-center gap-3 px-6 py-2.5 rounded-full text-[27px] font-bold border-2 shadow-sm ${
-                        dateOnDark ? 'bg-white/15 text-white border-white/30' : 'bg-white'
-                      }`
-                    : hideWaveBackground
-                    ? 'inline-flex items-center gap-3 px-5 py-2 rounded-full text-[27px] font-bold border-2 border-dashed border-slate-300 bg-white/60'
-                    : 'inline-flex items-center gap-3 text-[28px] font-extrabold'
+            {slide.lessonDate ? (
+              placeSlot(
+                'slot-date',
+                <div
+                  className={
+                    dateBoxed
+                      ? `inline-flex items-center gap-3 px-6 py-2.5 rounded-full text-[27px] font-bold border-2 shadow-sm ${
+                          dateOnDark ? 'bg-white/15 text-white border-white/30' : 'bg-white'
+                        }`
+                      : hideWaveBackground
+                      ? 'inline-flex items-center gap-3 px-5 py-2 rounded-full text-[27px] font-bold border-2 border-dashed border-slate-300 bg-white/60'
+                      : 'inline-flex items-center gap-3 text-[28px] font-extrabold'
+                  }
+                  style={
+                    dateOnDark
+                      ? { color: '#FFFFFF' }
+                      : dateBoxed
+                      ? {
+                          borderColor: neutralBorder,
+                          borderTopColor: neutralBorder,
+                          borderRightColor: neutralBorder,
+                          borderBottomColor: neutralBorder,
+                          borderLeftColor: neutralBorder,
+                          color: neutralAccent,
+                        }
+                      : { color: neutralAccent }
+                  }
+                >
+                  <Clock size={26} />
+                  <InlineEditableText
+                    value={dateValue}
+                    editable={editable && !isThumbnail}
+                    onCommit={(next) => onUpdateSlide?.({ lessonDate: next })}
+                  />
+                </div>,
+                {
+                  className: 'self-start',
+                  showBoxToggle: true,
+                  showLayerToggle: true,
+                  isBoxed: dateBoxed,
+                  isBottomLayer: dateOnDark,
                 }
-                style={
-                  dateOnDark
-                    ? { color: '#FFFFFF' }
-                    : dateBoxed
-                    ? {
-                        borderColor: neutralBorder,
-                        borderTopColor: neutralBorder,
-                        borderRightColor: neutralBorder,
-                        borderBottomColor: neutralBorder,
-                        borderLeftColor: neutralBorder,
-                        color: neutralAccent,
-                      }
-                    : { color: neutralAccent }
-                }
+              )
+            ) : editable && !isThumbnail ? (
+              <button
+                type="button"
+                onClick={() => onUpdateSlide?.({ lessonDate: todayFallback })}
+                className="self-start inline-flex items-center gap-2.5 px-6 py-2.5 rounded-full text-[24px] font-bold border-2 border-dashed border-zinc-400 bg-white/80 hover:bg-white text-zinc-700 hover:text-emerald-700 hover:border-emerald-500 shadow-sm transition"
+                title="Add current date to title page"
               >
-                <Clock size={26} />
-                <InlineEditableText
-                  value={dateValue}
-                  editable={editable && !isThumbnail}
-                  onCommit={(next) => onUpdateSlide?.({ lessonDate: next })}
-                />
-              </div>,
-              {
-                className: 'self-start',
-                showBoxToggle: true,
-                showLayerToggle: true,
-                isBoxed: dateBoxed,
-                isBottomLayer: dateOnDark,
-              }
-            )}
+                <Plus size={22} />
+                <span>+ Add Date</span>
+              </button>
+            ) : null}
 
             {placeSlot(
               'slot-title',
@@ -2252,7 +2268,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               }
             )}
 
-            {(slide.bigQuestion || (editable && !isThumbnail)) &&
+            {Boolean(slide.bigQuestion) &&
               placeSlot(
                 'slot-big-question',
                 <div
@@ -2306,72 +2322,6 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 }
               )}
           </div>
-
-          {slide.keyTermsStrip &&
-            slide.keyTermsStrip.length > 0 &&
-            placeSlot(
-              'slot-terms-inline',
-              <div
-                className={
-                  termsBoxed
-                    ? 'flex flex-wrap gap-3.5 max-w-[840px]'
-                    : hideWaveBackground
-                    ? 'flex flex-wrap gap-3 p-4 rounded-2xl border-2 border-dashed border-slate-300 bg-white/55 max-w-[840px]'
-                    : 'flex flex-wrap items-center gap-x-5 gap-y-2 max-w-[840px]'
-                }
-              >
-                {slide.keyTermsStrip.map((kt, i) =>
-                  termsBoxed ? (
-                    <div
-                      key={i}
-                      className={`px-6 py-3 rounded-2xl border-2 shadow-sm text-[25px] ${
-                        termsOnDark ? 'bg-white/16 border-white/30 text-white' : 'bg-white/95'
-                      }`}
-                      style={
-                        termsOnDark
-                          ? undefined
-                          : {
-                              borderColor: neutralBorder,
-                              borderTopColor: neutralBorder,
-                              borderRightColor: neutralBorder,
-                              borderBottomColor: neutralBorder,
-                              borderLeftColor: neutralBorder,
-                            }
-                      }
-                    >
-                      <span
-                        className="font-extrabold"
-                        style={{ color: termsOnDark ? '#FFFFFF' : neutralAccent }}
-                      >
-                        {kt.term}
-                      </span>
-                    </div>
-                  ) : (
-                    <span
-                      key={i}
-                      className="inline-flex items-center gap-3 text-[27px] font-extrabold"
-                      style={{ color: termsOnDark ? '#FFFFFF' : neutralAccent }}
-                    >
-                      {i > 0 && (
-                        <span
-                          className="w-2 h-2 rounded-full opacity-55"
-                          style={{
-                            backgroundColor: termsOnDark ? '#FFFFFF' : neutralAccent,
-                          }}
-                        />
-                      )}
-                      <span>{kt.term}</span>
-                    </span>
-                  )
-                )}
-              </div>,
-              {
-                showBoxToggle: true,
-                showLayerToggle: true,
-                isBoxed: termsBoxed,
-                isBottomLayer: termsOnDark,
-              }
-            )}
         </div>
 
         {/* Right Cover Area: Cropped inside bottom coloured wave by default; wireframe image zone shown in Step 1 picker */}
@@ -2442,6 +2392,29 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
 
     if (slide.presetId === 'custom') {
       return <div className="relative z-20 flex-1 pointer-events-none" />;
+    }
+
+    if (slide.tableData) {
+      return (
+        <div className={`relative z-20 flex-1 flex flex-col justify-center min-h-0 ${contentPad}`}>
+          <div className="w-full max-w-[1560px] mx-auto h-[600px] flex items-center justify-center">
+            <SlideTable
+              tableData={slide.tableData}
+              onDark={topOnDark}
+              neutralBorder={neutralBorder}
+              neutralAccent={neutralAccent}
+              neutralDark={neutralDark}
+              palette={p}
+              editable={editable && !isThumbnail}
+              isThumbnail={isThumbnail}
+              heading={slide.title}
+              onUpdateHeading={(nextH) => onUpdateSlide?.({ title: nextH })}
+              onUpdateTable={(nextT) => onUpdateSlide?.({ tableData: nextT })}
+              InlineEditable={InlineEditableText}
+            />
+          </div>
+        </div>
+      );
     }
 
     if (slide.presetId === 'mwb-starter-quadrant') {
@@ -3365,7 +3338,34 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       };
 
       let node: React.ReactNode;
-      if (el.kind === 'image') {
+      if (el.kind === 'table' || el.tableData) {
+        const tData: SlideTableData = el.tableData || {
+          rows: 3,
+          cols: 3,
+          headers: ['Column 1', 'Column 2', 'Column 3'],
+          cells: [
+            ['', '', ''],
+            ['', '', ''],
+            ['', '', ''],
+          ],
+        };
+        node = (
+          <SlideTable
+            tableData={tData}
+            onDark={onDark}
+            neutralBorder={neutralBorder}
+            neutralAccent={neutralAccent}
+            neutralDark={neutralDark}
+            palette={palette}
+            editable={editable && !isThumbnail}
+            isThumbnail={isThumbnail}
+            heading={el.heading}
+            onUpdateHeading={(nextH) => updateCustomEl({ heading: nextH })}
+            onUpdateTable={(nextT) => updateCustomEl({ tableData: nextT })}
+            InlineEditable={InlineEditableText}
+          />
+        );
+      } else if (el.kind === 'image') {
         node = el.imageUrl ? (
           <div
             onMouseEnter={() => {

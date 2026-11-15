@@ -395,14 +395,7 @@ export const DEMO_WORKSPACE: CurriculumWorkspace = {
               waveVariant: 'vertical-scurve-right',
               title: 'Network Hardware & Topologies',
               lessonDate: 'Thursday, 14 November 2026',
-              bigQuestion:
-                'If one corridor cable snaps at school, why does the rest of the building stay online?',
               bodyBlocks: [],
-              keyTermsStrip: [
-                { term: 'NIC', definition: 'Network Interface Card' },
-                { term: 'Switch', definition: 'Connects devices on a LAN' },
-                { term: 'Topology', definition: 'Layout of a network' },
-              ],
               mediaItem: {
                 id: 'med-1-0',
                 type: 'svg-diagram',
@@ -412,12 +405,12 @@ export const DEMO_WORKSPACE: CurriculumWorkspace = {
                 frameShape: 'clean',
                 placement: 'fill-bottom-layer',
               },
-              routineIcons: ['key-vocab'],
+              routineIcons: [],
               speakerNotes:
-                'Display this Lesson Title Page once the starter finishes so pupils copy the date and reflect on today’s enquiry question.',
+                'Display this Lesson Title Page once the starter finishes so pupils copy the date and topic title.',
               pedagogicalBadges: {
                 principle: 'Routine Lesson Opening',
-                cognitiveLoadNote: 'Topic title, current date, enquiry hook, and preview diagram orient attention calmly.',
+                cognitiveLoadNote: 'Clean topic title, current date, and preview visual orient attention calmly without cognitive clutter.',
               },
             },
             {
@@ -840,14 +833,7 @@ export const DEMO_WORKSPACE: CurriculumWorkspace = {
               waveVariant: 'vertical-scurve-right',
               title: 'Packet Switching & Routing',
               lessonDate: 'Thursday, 14 November 2026',
-              bigQuestion:
-                'How can a 4GB movie travel across broken or busy cables and still arrive in perfect order?',
               bodyBlocks: [],
-              keyTermsStrip: [
-                { term: 'Packet', definition: 'Split data unit' },
-                { term: 'Header', definition: 'Addresses + Sequence' },
-                { term: 'Checksum', definition: 'Error detector' },
-              ],
               mediaItem: {
                 id: 'med-2-0',
                 type: 'svg-diagram',
@@ -857,9 +843,9 @@ export const DEMO_WORKSPACE: CurriculumWorkspace = {
                 frameShape: 'clean',
                 placement: 'fill-bottom-layer',
               },
-              routineIcons: ['key-vocab'],
+              routineIcons: [],
               speakerNotes:
-                'Move into Lesson 2 once starter answers are checked, showing today’s topic, date, and enquiry question.',
+                'Move into Lesson 2 once starter answers are checked, showing today’s topic and date.',
             },
             {
               id: 'sl-2-2',

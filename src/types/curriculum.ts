@@ -168,6 +168,13 @@ export interface PaperCutLayer {
   opacity?: number;
 }
 
+export interface SlideTableData {
+  rows: number;
+  cols: number;
+  headers?: string[];
+  cells: string[][]; // row-major: cells[row][col]
+}
+
 export interface BespokeCanvasElement {
   id: string;
   kind:
@@ -178,7 +185,8 @@ export interface BespokeCanvasElement {
     | 'diagram'
     | 'image'
     | 'badge'
-    | 'callout';
+    | 'callout'
+    | 'table';
   x: number; // percentage 0..100
   y: number; // percentage 0..100
   w: number; // percentage 0..100
@@ -193,6 +201,7 @@ export interface BespokeCanvasElement {
   routineIcon?: RoutineIconType;
   layer?: 'top' | 'bottom';
   tone?: 'creamy' | 'tinted' | 'dark' | 'accent';
+  tableData?: SlideTableData;
 }
 
 export interface PedagogicalRationale {
@@ -244,6 +253,8 @@ export interface SlideData {
     icon?: string;
   }[];
   mediaItem?: SlideMediaItem;
+  tableData?: SlideTableData;
+  showDate?: boolean;
   customCanvasElements?: BespokeCanvasElement[];
   elementLayouts?: Record<string, ElementBoxOverride>;
   hiddenElementIds?: string[];

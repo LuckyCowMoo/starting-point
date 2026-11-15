@@ -93,10 +93,7 @@
   animation: timerDrumOut 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-/* Ensure boxed cards have consistent, matching borders on all four sides without falling back to currentColor */
-[class*="border-2"]:not([class*="border-l-"]):not([class*="border-zinc-"]) {
-  border-left-color: inherit;
-  border-right-color: inherit;
-  border-top-color: inherit;
-  border-bottom-color: inherit;
+/* Ensure boxed cards have clean neutral borders on all four sides by default rather than falling back to black currentColor */
+[class*="border-2"]:not([class*="border-zinc-"]):not([class*="border-white"]):not([class*="border-black"]):not([class*="border-sky-"]):not([class*="border-emerald-"]):not([class*="border-rose-"]):not([class*="border-indigo-"]) {
+  border-color: #E2E8F0;
 }

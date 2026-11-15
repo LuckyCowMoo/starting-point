@@ -17,6 +17,8 @@ import {
   PanelLeftClose,
   PanelRightClose,
   Play,
+  Check,
+  Clock,
   Plus,
   Sparkles,
   StickyNote,
@@ -24,6 +26,7 @@ import {
   Layers,
   RotateCcw,
   Spline,
+  Table as TableIcon,
   Terminal,
   Timer,
   Trash2,
@@ -41,6 +44,7 @@ import {
   RoutineIconType,
   SlideData,
   SlidePresetId,
+  SlideTableData,
   SlideTextBlock,
   WaveVariant,
 } from '../../types/curriculum';
@@ -105,6 +109,10 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
 
   const [surgicalPrompt, setSurgicalPrompt] = useState('');
   const [bespokePrompt, setBespokePrompt] = useState('');
+  const [tablePickerOpen, setTablePickerOpen] = useState(false);
+  const [tableRowsInput, setTableRowsInput] = useState(3);
+  const [tableColsInput, setTableColsInput] = useState(3);
+  const [tableHasHeader, setTableHasHeader] = useState(true);
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -1515,16 +1523,335 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                     placeholder="Slide title"
                     className="w-full px-3 py-2 rounded-xl border border-zinc-300 font-bold text-zinc-900"
                   />
-                  {slide.presetId === 'title-divider' && (
-                    <textarea
-                      value={slide.bigQuestion || ''}
-                      rows={2}
-                      onChange={(e) =>
-                        updateActiveSlide({ bigQuestion: e.target.value })
-                      }
-                      placeholder="Big Question..."
-                      className="w-full px-3 py-1.5 rounded-xl border border-zinc-300 text-zinc-700"
+                </div>
+
+                {/* Slide Date (Can be added/removed on any slide, especially Title Page) */}
+                <div className="space-y-2 border-t border-zinc-200 pt-3">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-zinc-500 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                      <Clock size={12} className="text-zinc-600" />
+                      Lesson Date
+                    </label>
+                    {slide.lessonDate ? (
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide({ lessonDate: undefined })}
+                        className="text-[10px] font-bold text-rose-600 hover:underline flex items-center gap-0.5"
+                        title="Remove date from slide"
+                      >
+                        <Trash2 size={11} /> Remove
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateActiveSlide({
+                            lessonDate: new Date().toLocaleDateString('en-GB', {
+                              weekday: 'long',
+                              day: 'numeric',
+                              month: 'long',
+                              year: 'numeric',
+                            }),
+                          })
+                        }
+                        className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-0.5"
+                      >
+                        <Plus size={12} /> Add Date
+                      </button>
+                    )}
+                  </div>
+                  {slide.lessonDate && (
+                    <input
+                      value={slide.lessonDate}
+                      onChange={(e) => updateActiveSlide({ lessonDate: e.target.value })}
+                      placeholder="e.g. Thursday, 14 November 2026"
+                      className="w-full px-3 py-1.5 rounded-xl border border-zinc-300 font-semibold text-zinc-800 text-xs bg-white"
                     />
+                  )}
+                </div>
+
+                {/* Big Question / Enquiry Hook */}
+                {(slide.presetId === 'title-divider' ||
+                  slide.presetId === 'lesson-title-page' ||
+                  Boolean(slide.bigQuestion)) && (
+                  <div className="space-y-2 border-t border-zinc-200 pt-3">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider text-[10px]">
+                        Today&apos;s Enquiry Question / Hook
+                      </label>
+                      {slide.bigQuestion ? (
+                        <button
+                          type="button"
+                          onClick={() => updateActiveSlide({ bigQuestion: undefined })}
+                          className="text-[10px] font-bold text-rose-600 hover:underline flex items-center gap-0.5"
+                        >
+                          <Trash2 size={11} /> Remove
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateActiveSlide({
+                              bigQuestion:
+                                'How can a single computer network connect millions of users reliably?',
+                            })
+                          }
+                          className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-0.5"
+                        >
+                          <Plus size={12} /> Add Hook
+                        </button>
+                      )}
+                    </div>
+                    {slide.bigQuestion && (
+                      <textarea
+                        value={slide.bigQuestion}
+                        rows={2}
+                        onChange={(e) => updateActiveSlide({ bigQuestion: e.target.value })}
+                        placeholder="Add lesson hook / enquiry question..."
+                        className="w-full px-3 py-1.5 rounded-xl border border-zinc-300 text-zinc-700 text-xs bg-white"
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Slide Components & Table Creator */}
+                <div className="space-y-2 border-t border-zinc-200 pt-3">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-zinc-500 uppercase tracking-wider text-[10px]">
+                      Add Slide Components
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setTablePickerOpen(!tablePickerOpen)}
+                      className={`px-2.5 py-1.5 rounded-xl border font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+                        tablePickerOpen
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          : 'bg-white hover:bg-zinc-50 border-zinc-300 text-zinc-800'
+                      }`}
+                    >
+                      <TableIcon size={13} className={tablePickerOpen ? 'text-white' : 'text-emerald-700'} />
+                      <span>Table (X × Y)</span>
+                    </button>
+
+                    {!slide.bigQuestion && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateActiveSlide({
+                            bigQuestion:
+                              'How does this concept solve our central engineering challenge?',
+                          })
+                        }
+                        className="px-2.5 py-1.5 rounded-xl border bg-white hover:bg-zinc-50 border-zinc-300 text-zinc-800 font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                      >
+                        <Plus size={13} className="text-sky-700" />
+                        <span>Enquiry Hook</span>
+                      </button>
+                    )}
+
+                    {!slide.lessonDate && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateActiveSlide({
+                            lessonDate: new Date().toLocaleDateString('en-GB', {
+                              weekday: 'long',
+                              day: 'numeric',
+                              month: 'long',
+                              year: 'numeric',
+                            }),
+                          })
+                        }
+                        className="px-2.5 py-1.5 rounded-xl border bg-white hover:bg-zinc-50 border-zinc-300 text-zinc-800 font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                      >
+                        <Clock size={13} className="text-amber-700" />
+                        <span>Lesson Date</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateActiveSlide({
+                          keyTermsStrip: [
+                            ...(slide.keyTermsStrip || []),
+                            { term: 'New Key Term', definition: 'Clear pupil definition...' },
+                          ],
+                        })
+                      }
+                      className="px-2.5 py-1.5 rounded-xl border bg-white hover:bg-zinc-50 border-zinc-300 text-zinc-800 font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Plus size={13} className="text-violet-700" />
+                      <span>Key Term</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateActiveSlide({
+                          bodyBlocks: [
+                            ...slide.bodyBlocks,
+                            {
+                              id: `blk-${Date.now()}`,
+                              heading: '',
+                              content: '• Key pupil-facing teaching point...',
+                              style: 'boxed',
+                              layer: 'top',
+                            },
+                          ],
+                        })
+                      }
+                      className="px-2.5 py-1.5 rounded-xl border bg-white hover:bg-zinc-50 border-zinc-300 text-zinc-800 font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Plus size={13} className="text-emerald-700" />
+                      <span>Boxed Card</span>
+                    </button>
+                  </div>
+
+                  {/* Table Creator Popover / Inline Box */}
+                  {tablePickerOpen && (
+                    <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-300 space-y-3 animate-fade-in">
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-xs text-emerald-950 flex items-center gap-1.5">
+                          <TableIcon size={14} className="text-emerald-700" />
+                          Insert Table
+                        </span>
+                        <div className="flex gap-1">
+                          {[
+                            { r: 2, c: 2 },
+                            { r: 3, c: 3 },
+                            { r: 4, c: 3 },
+                            { r: 5, c: 2 },
+                          ].map((chip) => (
+                            <button
+                              key={`${chip.r}x${chip.c}`}
+                              type="button"
+                              onClick={() => {
+                                setTableRowsInput(chip.r);
+                                setTableColsInput(chip.c);
+                              }}
+                              className="px-1.5 py-0.5 rounded-md bg-white border border-emerald-200 text-[10px] font-bold text-emerald-800 hover:bg-emerald-100"
+                            >
+                              {chip.r}×{chip.c}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-600">Rows (X)</label>
+                          <div className="flex items-center border border-zinc-300 bg-white rounded-lg overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setTableRowsInput(Math.max(1, tableRowsInput - 1))}
+                              className="px-2 py-1 text-xs font-bold text-zinc-600 hover:bg-zinc-100"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min={1}
+                              max={10}
+                              value={tableRowsInput}
+                              onChange={(e) =>
+                                setTableRowsInput(Math.max(1, Math.min(10, Number(e.target.value) || 1)))
+                              }
+                              className="w-full text-center text-xs font-bold py-1 border-x border-zinc-200 outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setTableRowsInput(Math.min(10, tableRowsInput + 1))}
+                              className="px-2 py-1 text-xs font-bold text-zinc-600 hover:bg-zinc-100"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-600">Columns (Y)</label>
+                          <div className="flex items-center border border-zinc-300 bg-white rounded-lg overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setTableColsInput(Math.max(1, tableColsInput - 1))}
+                              className="px-2 py-1 text-xs font-bold text-zinc-600 hover:bg-zinc-100"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min={1}
+                              max={8}
+                              value={tableColsInput}
+                              onChange={(e) =>
+                                setTableColsInput(Math.max(1, Math.min(8, Number(e.target.value) || 1)))
+                              }
+                              className="w-full text-center text-xs font-bold py-1 border-x border-zinc-200 outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setTableColsInput(Math.min(8, tableColsInput + 1))}
+                              className="px-2 py-1 text-xs font-bold text-zinc-600 hover:bg-zinc-100"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-emerald-950">
+                        <input
+                          type="checkbox"
+                          checked={tableHasHeader}
+                          onChange={(e) => setTableHasHeader(e.target.checked)}
+                          className="rounded text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span>Include Header Row</span>
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const r = Math.max(1, tableRowsInput);
+                          const c = Math.max(1, tableColsInput);
+                          const headers = tableHasHeader
+                            ? Array.from({ length: c }, (_, i) => `Column ${i + 1}`)
+                            : undefined;
+                          const cells = Array.from({ length: r }, () => Array.from({ length: c }, () => ''));
+                          const newTableEl: BespokeCanvasElement = {
+                            id: `tbl-${Date.now()}`,
+                            kind: 'table',
+                            content: '',
+                            x: 8,
+                            y: 26,
+                            w: 84,
+                            h: 54,
+                            layer: 'top',
+                            tableData: {
+                              rows: r,
+                              cols: c,
+                              headers,
+                              cells,
+                            },
+                          };
+                          updateActiveSlide({
+                            customCanvasElements: [
+                              ...(slide.customCanvasElements || []),
+                              newTableEl,
+                            ],
+                          });
+                          setTablePickerOpen(false);
+                        }}
+                        className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs flex items-center justify-center gap-1.5 transition"
+                      >
+                        <Plus size={14} />
+                        <span>Insert {tableRowsInput} × {tableColsInput} Table</span>
+                      </button>
+                    </div>
                   )}
                 </div>
 

@@ -91,6 +91,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
 
   const [selectedSlideIdx, setSelectedSlideIdx] = useState(0);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [selectedElementIds, setSelectedElementIds] = useState<string[]>([]);
   const [mediaTargetElementId, setMediaTargetElementId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<'edit' | 'ai'>('edit');
   const [previewAllAnswers, setPreviewAllAnswers] = useState(true);
@@ -114,6 +115,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
 
   useEffect(() => {
     setSelectedElementId(null);
+    setSelectedElementIds([]);
   }, [activeSlideIdForReset]);
 
   if (!lesson || lesson.slidesData.length === 0) {
@@ -1116,7 +1118,15 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
               editable={true}
               showWavePathEditor={showWavePathEditor}
               selectedElementId={selectedElementId}
-              onSelectElement={setSelectedElementId}
+              onSelectElement={(id) => {
+                setSelectedElementId(id);
+                setSelectedElementIds(id ? [id] : []);
+              }}
+              selectedElementIds={selectedElementIds}
+              onSelectElements={(ids) => {
+                setSelectedElementIds(ids);
+                setSelectedElementId(ids[0] || null);
+              }}
               onUpdateSlide={updateActiveSlide}
               onOpenMediaPicker={(targetElId) => {
                 setMediaTargetElementId(targetElId || null);

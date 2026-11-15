@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
   AlertTriangle,
   Check,
   CheckCircle2,
@@ -14,6 +18,7 @@ import {
   Layers,
   Lightbulb,
   LucideIcon,
+  Move,
   Network,
   Scale,
   Search,
@@ -25,6 +30,7 @@ import {
   Workflow,
   X,
 } from 'lucide-react';
+import { calculateSnapping, DistanceGuide, SnapBox, SnapGuideLine } from './snapGuides';
 import {
   BespokeCanvasElement,
   DualCodeIconId,
@@ -138,6 +144,8 @@ interface SlideCanvasProps {
   showWavePathEditor?: boolean;
   selectedElementId?: string | null;
   onSelectElement?: (id: string | null) => void;
+  selectedElementIds?: string[];
+  onSelectElements?: (ids: string[]) => void;
   onUpdateSlide?: (patch: Partial<SlideData>) => void;
   onOpenMediaPicker?: (targetElementId?: string) => void;
   hoveredImageTarget?: string | null;
@@ -377,11 +385,12 @@ const DualCodeBadgeControl: React.FC<DualCodeBadgeControlProps> = ({
 type DragMode = 'move' | 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 
 interface ComponentDragSession {
-  slotId: string;
+  primarySlotId: string;
   mode: DragMode;
   startClientX: number;
   startClientY: number;
-  originBox: ElementBoxOverride;
+  originBoxes: Record<string, ElementBoxOverride>;
+  allCandidateBoxes: SnapBox[];
   minDeltaPx: number;
   moved: boolean;
 }
@@ -405,13 +414,14 @@ interface InteractiveSlotProps {
   override?: ElementBoxOverride;
   editable: boolean;
   isSelected: boolean;
+  showSingleToolbar?: boolean;
   isBoxed?: boolean;
   isBottomLayer?: boolean;
   showBoxToggle?: boolean;
   showLayerToggle?: boolean;
   stretchHeight?: boolean;
   className?: string;
-  onSelect: () => void;
+  onSelect: (isCtrl: boolean) => void;
   onStartDrag: (
     e: React.PointerEvent,
     slotEl: HTMLElement,
@@ -430,6 +440,7 @@ const InteractiveSlot: React.FC<InteractiveSlotProps> = ({
   override,
   editable,
   isSelected,
+  showSingleToolbar = true,
   isBoxed = false,
   isBottomLayer = false,
   showBoxToggle = false,
@@ -477,13 +488,14 @@ const InteractiveSlot: React.FC<InteractiveSlotProps> = ({
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         const target = e.target as HTMLElement;
+        const isCtrl = e.ctrlKey || e.metaKey;
         if (target.closest('input, textarea, select, button, [data-no-drag]')) {
           e.stopPropagation();
-          onSelect();
+          onSelect(isCtrl);
           return;
         }
         e.stopPropagation();
-        onSelect();
+        onSelect(isCtrl);
         if (slotRef.current) {
           onStartDrag(e, slotRef.current, 'move', 6);
         }
@@ -493,19 +505,19 @@ const InteractiveSlot: React.FC<InteractiveSlotProps> = ({
       }}
       className={`group/slot ${override ? '' : 'relative'} transition-shadow pointer-events-auto flex flex-col ${
         isSelected
-          ? 'ring-3 ring-sky-500 rounded-2xl shadow-lg'
+          ? 'ring-3 ring-sky-500 rounded-2xl shadow-lg bg-sky-50/10'
           : 'hover:ring-2 hover:ring-sky-400/70 rounded-2xl'
       } ${className}`}
     >
       {children}
 
-      {/* PowerPoint / Google Slides Action Toolbar above selected component */}
-      {isSelected && (
+      {/* PowerPoint / Google Slides Action Toolbar above selected component (shown if single element selected) */}
+      {isSelected && showSingleToolbar && (
         <div
           data-no-drag="true"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
-          className="absolute -top-12 left-0 z-50 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900/95 text-white shadow-2xl border border-zinc-700 whitespace-nowrap"
+          className="absolute -top-12 left-0 z-50 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900/95 text-white shadow-2xl border border-zinc-700 whitespace-nowrap animate-fade-in"
         >
           <button
             type="button"
@@ -579,8 +591,9 @@ const InteractiveSlot: React.FC<InteractiveSlotProps> = ({
         </div>
       )}
 
-      {/* 8 PowerPoint-style Resize Handles when selected */}
+      {/* 8 PowerPoint-style Resize Handles when selected (single element only) */}
       {isSelected &&
+        showSingleToolbar &&
         RESIZE_HANDLES.map((h) => (
           <div
             key={h.dir}
@@ -612,6 +625,8 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   showWavePathEditor = false,
   selectedElementId: controlledSelectedId,
   onSelectElement,
+  selectedElementIds: controlledSelectedIds,
+  onSelectElements,
   onUpdateSlide,
   onOpenMediaPicker,
   hoveredImageTarget,
@@ -625,16 +640,58 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [sideImgDraggingPts, setSideImgDraggingPts] = useState<Point[] | null>(null);
   const [sideImgDragIdx, setSideImgDragIdx] = useState<number | null>(null);
-  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
+  const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
   const [compDrag, setCompDrag] = useState<ComponentDragSession | null>(null);
   const lastDraggedAtRef = useRef(0);
+  const [activeGuides, setActiveGuides] = useState<SnapGuideLine[]>([]);
+  const [activeDistanceGuides, setActiveDistanceGuides] = useState<DistanceGuide[]>([]);
+  const [isShiftHeld, setIsShiftHeld] = useState(false);
 
-  const activeSelectedId =
-    controlledSelectedId !== undefined ? controlledSelectedId : internalSelectedId;
-  const setSelectedId = (id: string | null) => {
-    setInternalSelectedId(id);
-    onSelectElement?.(id);
+  // Marquee selection state
+  const [marqueeBox, setMarqueeBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const marqueeStartRef = useRef<{
+    clientX: number;
+    clientY: number;
+    canvasX: number;
+    canvasY: number;
+    ctrl: boolean;
+  } | null>(null);
+
+  const selectedIds = useMemo(() => {
+    if (controlledSelectedIds !== undefined) return controlledSelectedIds;
+    if (internalSelectedIds.length > 1) return internalSelectedIds;
+    if (controlledSelectedId !== undefined) {
+      return controlledSelectedId ? [controlledSelectedId] : [];
+    }
+    return internalSelectedIds;
+  }, [controlledSelectedIds, controlledSelectedId, internalSelectedIds]);
+
+  const setSelectedIds = (nextOrFn: string[] | ((prev: string[]) => string[])) => {
+    setInternalSelectedIds((prev) => {
+      const next = typeof nextOrFn === 'function' ? nextOrFn(prev) : nextOrFn;
+      onSelectElements?.(next);
+      if (next.length <= 1) {
+        onSelectElement?.(next[0] || null);
+      }
+      return next;
+    });
   };
+
+  const handleSelectSlot = (slotId: string, isCtrl: boolean) => {
+    if (isCtrl) {
+      setSelectedIds((prev) =>
+        prev.includes(slotId) ? prev.filter((id) => id !== slotId) : [...prev, slotId]
+      );
+    } else {
+      setSelectedIds((prev) => {
+        if (prev.includes(slotId) && prev.length > 1) {
+          return prev;
+        }
+        return [slotId];
+      });
+    }
+  };
+
   const canEditComponents = editable && !isThumbnail && !hideWaveBackground;
 
   const palette = PHASE_PALETTES[slide.phase];
@@ -849,41 +906,54 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   latestSlideRef.current = slide;
   latestUpdateRef.current = onUpdateSlide;
 
-  const deleteSlot = (slotId: string) => {
+  const activeSelectedId = selectedIds[0] || null;
+  const setSelectedId = (id: string | null) => {
+    setSelectedIds(id ? [id] : []);
+  };
+
+  const deleteSlots = (slotIds: string[]) => {
     const cur = latestSlideRef.current;
     const upd = latestUpdateRef.current;
-    if (!upd) return;
+    if (!upd || slotIds.length === 0) return;
 
-    const nextLayouts = cur.elementLayouts ? { ...cur.elementLayouts } : undefined;
-    if (nextLayouts) delete nextLayouts[slotId];
+    const nextLayouts = cur.elementLayouts ? { ...cur.elementLayouts } : {};
+    slotIds.forEach((id) => delete nextLayouts[id]);
 
-    if (cur.bodyBlocks.some((b) => b.id === slotId)) {
-      upd({
-        bodyBlocks: cur.bodyBlocks.filter((b) => b.id !== slotId),
-        elementLayouts: nextLayouts,
-      });
-    } else if (cur.customCanvasElements?.some((el) => el.id === slotId)) {
-      upd({
-        customCanvasElements: cur.customCanvasElements.filter((el) => el.id !== slotId),
-        elementLayouts: nextLayouts,
-      });
-    } else if (slotId === 'slot-media') {
-      upd({
-        mediaItem: undefined,
-        elementLayouts: nextLayouts,
-        hiddenElementIds: [...new Set([...(cur.hiddenElementIds || []), 'slot-media'])],
-      });
-    } else {
-      upd({
-        elementLayouts: nextLayouts,
-        hiddenElementIds: [...new Set([...(cur.hiddenElementIds || []), slotId])],
-      });
-    }
-    setSelectedId(null);
+    const nextHidden = new Set(cur.hiddenElementIds || []);
+    let nextBodyBlocks = cur.bodyBlocks;
+    let nextCustomEls = cur.customCanvasElements;
+    let clearMedia = false;
+
+    slotIds.forEach((id) => {
+      if (id === 'slot-media') {
+        clearMedia = true;
+        nextHidden.add('slot-media');
+      } else if (cur.bodyBlocks.some((b) => b.id === id)) {
+        nextBodyBlocks = nextBodyBlocks.filter((b) => b.id !== id);
+      } else if (cur.customCanvasElements?.some((el) => el.id === id)) {
+        nextCustomEls = nextCustomEls?.filter((el) => el.id !== id);
+      } else {
+        nextHidden.add(id);
+      }
+    });
+
+    upd({
+      bodyBlocks: nextBodyBlocks,
+      customCanvasElements: nextCustomEls,
+      elementLayouts: nextLayouts,
+      hiddenElementIds: Array.from(nextHidden),
+      ...(clearMedia ? { mediaItem: undefined } : {}),
+    });
+
+    setSelectedIds([]);
+  };
+
+  const deleteSlot = (slotId: string) => {
+    deleteSlots([slotId]);
   };
 
   useEffect(() => {
-    if (!canEditComponents || !activeSelectedId) return;
+    if (!canEditComponents || selectedIds.length === 0) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       const active = document.activeElement as HTMLElement | null;
@@ -897,176 +967,27 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         return;
       }
       e.preventDefault();
-      deleteSlot(activeSelectedId);
+      deleteSlots(selectedIds);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [canEditComponents, activeSelectedId]);
+  }, [canEditComponents, selectedIds]);
 
-  const handleStartSlotDrag = (
-    slotId: string,
-    e: React.PointerEvent,
-    slotEl: HTMLElement,
-    mode: DragMode,
-    minDeltaPx: number,
-    defaults?: { layer?: 'top' | 'bottom'; boxed?: boolean }
-  ) => {
-    const canvasEl = canvasBoxRef.current;
-    if (!canvasEl || !latestUpdateRef.current) return;
-    const canvasRect = canvasEl.getBoundingClientRect();
-    const slotRect = slotEl.getBoundingClientRect();
-    if (!canvasRect.width || !canvasRect.height) return;
-
-    const existing = latestSlideRef.current.elementLayouts?.[slotId];
-    const originBox: ElementBoxOverride = existing
-      ? { ...existing }
-      : {
-          x: Math.round(((slotRect.left - canvasRect.left) / canvasRect.width) * 1920),
-          y: Math.round(((slotRect.top - canvasRect.top) / canvasRect.height) * 1080),
-          w: Math.max(120, Math.round((slotRect.width / canvasRect.width) * 1920)),
-          h: Math.max(54, Math.round((slotRect.height / canvasRect.height) * 1080)),
-          layer: defaults?.layer,
-          boxed: defaults?.boxed,
-        };
-
-    setCompDrag({
-      slotId,
-      mode,
-      startClientX: e.clientX,
-      startClientY: e.clientY,
-      originBox,
-      minDeltaPx,
-      moved: false,
-    });
-  };
-
+  // Track shift key globally for user awareness (holding shift disables snapping)
   useEffect(() => {
-    if (!compDrag) return;
-    let moved = compDrag.moved;
-    const session = compDrag;
-
-    const onMove = (e: PointerEvent) => {
-      const canvasEl = canvasBoxRef.current;
-      const upd = latestUpdateRef.current;
-      const cur = latestSlideRef.current;
-      if (!canvasEl || !upd) return;
-      const dxScreen = e.clientX - session.startClientX;
-      const dyScreen = e.clientY - session.startClientY;
-
-      if (!moved) {
-        if (Math.hypot(dxScreen, dyScreen) < session.minDeltaPx) return;
-        moved = true;
-        lastDraggedAtRef.current = Date.now();
-      } else {
-        lastDraggedAtRef.current = Date.now();
-      }
-
-      const rect = canvasEl.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
-      const dx = (dxScreen / rect.width) * 1920;
-      const dy = (dyScreen / rect.height) * 1080;
-
-      const o = session.originBox;
-      let nextX = o.x;
-      let nextY = o.y;
-      let nextW = o.w;
-      let nextH = o.h;
-
-      if (session.mode === 'move') {
-        nextX = Math.max(-80, Math.min(1820, Math.round(o.x + dx)));
-        nextY = Math.max(-40, Math.min(1000, Math.round(o.y + dy)));
-      } else {
-        const MIN_W = 110;
-        const MIN_H = 52;
-        if (session.mode.includes('e')) {
-          nextW = Math.max(MIN_W, Math.round(o.w + dx));
-        }
-        if (session.mode.includes('s')) {
-          nextH = Math.max(MIN_H, Math.round(o.h + dy));
-        }
-        if (session.mode.includes('w')) {
-          const maxShift = o.w - MIN_W;
-          const clampedDx = Math.min(dx, maxShift);
-          nextX = Math.round(o.x + clampedDx);
-          nextW = Math.round(o.w - clampedDx);
-        }
-        if (session.mode.includes('n')) {
-          const maxShift = o.h - MIN_H;
-          const clampedDy = Math.min(dy, maxShift);
-          nextY = Math.round(o.y + clampedDy);
-          nextH = Math.round(o.h - clampedDy);
-        }
-      }
-
-      const nextBox: ElementBoxOverride = {
-        ...o,
-        x: nextX,
-        y: nextY,
-        w: Math.min(1920, nextW),
-        h: Math.min(1080, nextH),
-      };
-
-      // Sync bespoke custom element % coords if it lives in customCanvasElements
-      const hasCustomEl = cur.customCanvasElements?.some(
-        (el) => el.id === session.slotId
-      );
-      if (hasCustomEl && cur.customCanvasElements) {
-        upd({
-          elementLayouts: {
-            ...(cur.elementLayouts || {}),
-            [session.slotId]: nextBox,
-          },
-          customCanvasElements: cur.customCanvasElements.map((el) =>
-            el.id === session.slotId
-              ? {
-                  ...el,
-                  x: Number(((nextBox.x / 1920) * 100).toFixed(2)),
-                  y: Number(((nextBox.y / 1080) * 100).toFixed(2)),
-                  w: Number(((nextBox.w / 1920) * 100).toFixed(2)),
-                  h: Number(((nextBox.h / 1080) * 100).toFixed(2)),
-                }
-              : el
-          ),
-        });
-      } else {
-        upd({
-          elementLayouts: {
-            ...(cur.elementLayouts || {}),
-            [session.slotId]: nextBox,
-          },
-        });
-      }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setIsShiftHeld(true);
     };
-
-    const onUp = () => {
-      if (moved) {
-        lastDraggedAtRef.current = Date.now();
-      }
-      setCompDrag(null);
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setIsShiftHeld(false);
     };
-
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
     return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
     };
-  }, [compDrag]);
-
-  const updateBlock = (blockId: string, patch: Partial<SlideTextBlock>) => {
-    if (!onUpdateSlide) return;
-    onUpdateSlide({
-      bodyBlocks: slide.bodyBlocks.map((b) =>
-        b.id === blockId ? { ...b, ...patch } : b
-      ),
-    });
-  };
-
-  const neutralAccent = hideWaveBackground ? '#334155' : palette.accent;
-  const neutralDark = hideWaveBackground ? '#0F172A' : palette.darkInk;
-  const neutralBorder = hideWaveBackground ? '#CBD5E1' : palette.borderAccent;
-  const hiddenSet = new Set(slide.hiddenElementIds || []);
-  const movedOverlays: React.ReactNode[] = [];
+  }, []);
 
   const measureSlotBox = (slotId: string): ElementBoxOverride | null => {
     const canvas = canvasBoxRef.current;
@@ -1083,6 +1004,373 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       h: Math.max(56, Math.round(sRect.height / s)),
     };
   };
+
+  const getCandidateSnapBoxes = (excludedIds: Set<string>): SnapBox[] => {
+    const result: SnapBox[] = [];
+    const canvas = canvasBoxRef.current;
+    if (!canvas) return result;
+    const cRect = canvas.getBoundingClientRect();
+    if (!cRect.width || !cRect.height) return result;
+
+    const hiddenSetLocal = new Set(latestSlideRef.current.hiddenElementIds || []);
+
+    // 1. From elementLayouts
+    if (latestSlideRef.current.elementLayouts) {
+      for (const [id, box] of Object.entries(latestSlideRef.current.elementLayouts)) {
+        if (!excludedIds.has(id) && !hiddenSetLocal.has(id)) {
+          result.push({
+            id,
+            x: box.x,
+            y: box.y,
+            w: box.w,
+            h: box.h,
+          });
+        }
+      }
+    }
+
+    // 2. From DOM for un-overridden slots
+    const slotElements = canvas.querySelectorAll<HTMLElement>('[data-slot-id]');
+    slotElements.forEach((el) => {
+      const slotId = el.getAttribute('data-slot-id');
+      if (!slotId || excludedIds.has(slotId) || hiddenSetLocal.has(slotId)) return;
+      if (result.some((b) => b.id === slotId)) return;
+
+      const sRect = el.getBoundingClientRect();
+      const x = Math.round(((sRect.left - cRect.left) / cRect.width) * 1920);
+      const y = Math.round(((sRect.top - cRect.top) / cRect.height) * 1080);
+      const w = Math.round((sRect.width / cRect.width) * 1920);
+      const h = Math.round((sRect.height / cRect.height) * 1080);
+
+      if (w > 30 && h > 20) {
+        result.push({ id: slotId, x, y, w, h });
+      }
+    });
+
+    return result;
+  };
+
+  const handleStartSlotDrag = (
+    slotId: string,
+    e: React.PointerEvent,
+    slotEl: HTMLElement,
+    mode: DragMode,
+    minDeltaPx: number,
+    defaults?: { layer?: 'top' | 'bottom'; boxed?: boolean }
+  ) => {
+    const canvasEl = canvasBoxRef.current;
+    if (!canvasEl || !latestUpdateRef.current) return;
+    const canvasRect = canvasEl.getBoundingClientRect();
+    if (!canvasRect.width || !canvasRect.height) return;
+
+    // Determine target slot IDs to drag together
+    const targetSlotIds = selectedIds.includes(slotId) ? selectedIds : [slotId];
+    if (!selectedIds.includes(slotId)) {
+      setSelectedIds([slotId]);
+    }
+
+    const originBoxes: Record<string, ElementBoxOverride> = {};
+
+    targetSlotIds.forEach((id) => {
+      const existing = latestSlideRef.current.elementLayouts?.[id];
+      if (existing) {
+        originBoxes[id] = { ...existing };
+      } else {
+        const el = canvasEl.querySelector<HTMLElement>(`[data-slot-id="${id}"]`) || slotEl;
+        const elRect = el.getBoundingClientRect();
+        originBoxes[id] = {
+          x: Math.round(((elRect.left - canvasRect.left) / canvasRect.width) * 1920),
+          y: Math.round(((elRect.top - canvasRect.top) / canvasRect.height) * 1080),
+          w: Math.max(120, Math.round((elRect.width / canvasRect.width) * 1920)),
+          h: Math.max(54, Math.round((elRect.height / canvasRect.height) * 1080)),
+          layer: defaults?.layer,
+          boxed: defaults?.boxed,
+        };
+      }
+    });
+
+    const candidateBoxes = getCandidateSnapBoxes(new Set(targetSlotIds));
+
+    setCompDrag({
+      primarySlotId: slotId,
+      mode,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      originBoxes,
+      allCandidateBoxes: candidateBoxes,
+      minDeltaPx,
+      moved: false,
+    });
+  };
+
+  useEffect(() => {
+    if (!compDrag) return;
+    let moved = compDrag.moved;
+    const session = compDrag;
+
+    const onMove = (e: PointerEvent) => {
+      const canvasEl = canvasBoxRef.current;
+      const upd = latestUpdateRef.current;
+      const cur = latestSlideRef.current;
+      if (!canvasEl || !upd) return;
+
+      setIsShiftHeld(e.shiftKey);
+
+      const dxScreen = e.clientX - session.startClientX;
+      const dyScreen = e.clientY - session.startClientY;
+
+      if (!moved) {
+        if (Math.hypot(dxScreen, dyScreen) < session.minDeltaPx) return;
+        moved = true;
+        lastDraggedAtRef.current = Date.now();
+      } else {
+        lastDraggedAtRef.current = Date.now();
+      }
+
+      const rect = canvasEl.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const rawDx = (dxScreen / rect.width) * 1920;
+      const rawDy = (dyScreen / rect.height) * 1080;
+
+      const primaryOrigin = session.originBoxes[session.primarySlotId];
+      if (!primaryOrigin) return;
+
+      if (session.mode === 'move') {
+        // Calculate unconstrained target box for primary element
+        const unconstrainedPrimaryBox: SnapBox = {
+          id: session.primarySlotId,
+          x: primaryOrigin.x + rawDx,
+          y: primaryOrigin.y + rawDy,
+          w: primaryOrigin.w,
+          h: primaryOrigin.h,
+        };
+
+        // Snapping calculation against candidates & canvas center landmarks
+        const snapResult = calculateSnapping(
+          unconstrainedPrimaryBox,
+          session.allCandidateBoxes,
+          8, // 8px threshold
+          e.shiftKey // Holding Shift disables snapping
+        );
+
+        setActiveGuides(snapResult.guides);
+        setActiveDistanceGuides(snapResult.distanceGuides);
+
+        // Derive synchronized delta for all selected items
+        const deltaX = snapResult.snappedX - primaryOrigin.x;
+        const deltaY = snapResult.snappedY - primaryOrigin.y;
+
+        const nextLayouts = { ...(cur.elementLayouts || {}) };
+        const updatedCustomEls = cur.customCanvasElements
+          ? [...cur.customCanvasElements]
+          : undefined;
+
+        for (const [id, o] of Object.entries(session.originBoxes)) {
+          const nextX = Math.max(-100, Math.min(1900, Math.round(o.x + deltaX)));
+          const nextY = Math.max(-100, Math.min(1060, Math.round(o.y + deltaY)));
+          const nextBox: ElementBoxOverride = {
+            ...o,
+            x: nextX,
+            y: nextY,
+            w: o.w,
+            h: o.h,
+          };
+          nextLayouts[id] = nextBox;
+
+          if (updatedCustomEls) {
+            const idx = updatedCustomEls.findIndex((el) => el.id === id);
+            if (idx !== -1) {
+              updatedCustomEls[idx] = {
+                ...updatedCustomEls[idx],
+                x: Number(((nextBox.x / 1920) * 100).toFixed(2)),
+                y: Number(((nextBox.y / 1080) * 100).toFixed(2)),
+              };
+            }
+          }
+        }
+
+        upd({
+          elementLayouts: nextLayouts,
+          ...(updatedCustomEls ? { customCanvasElements: updatedCustomEls } : {}),
+        });
+      } else {
+        // Resize mode for primary selected element
+        setActiveGuides([]);
+        setActiveDistanceGuides([]);
+        const MIN_W = 110;
+        const MIN_H = 52;
+        let nextX = primaryOrigin.x;
+        let nextY = primaryOrigin.y;
+        let nextW = primaryOrigin.w;
+        let nextH = primaryOrigin.h;
+
+        if (session.mode.includes('e')) {
+          nextW = Math.max(MIN_W, Math.round(primaryOrigin.w + rawDx));
+        }
+        if (session.mode.includes('s')) {
+          nextH = Math.max(MIN_H, Math.round(primaryOrigin.h + rawDy));
+        }
+        if (session.mode.includes('w')) {
+          const maxShift = primaryOrigin.w - MIN_W;
+          const clampedDx = Math.min(rawDx, maxShift);
+          nextX = Math.round(primaryOrigin.x + clampedDx);
+          nextW = Math.round(primaryOrigin.w - clampedDx);
+        }
+        if (session.mode.includes('n')) {
+          const maxShift = primaryOrigin.h - MIN_H;
+          const clampedDy = Math.min(rawDy, maxShift);
+          nextY = Math.round(primaryOrigin.y + clampedDy);
+          nextH = Math.round(primaryOrigin.h - clampedDy);
+        }
+
+        const nextBox: ElementBoxOverride = {
+          ...primaryOrigin,
+          x: nextX,
+          y: nextY,
+          w: Math.min(1920, nextW),
+          h: Math.min(1080, nextH),
+        };
+
+        const hasCustomEl = cur.customCanvasElements?.some(
+          (el) => el.id === session.primarySlotId
+        );
+        if (hasCustomEl && cur.customCanvasElements) {
+          upd({
+            elementLayouts: {
+              ...(cur.elementLayouts || {}),
+              [session.primarySlotId]: nextBox,
+            },
+            customCanvasElements: cur.customCanvasElements.map((el) =>
+              el.id === session.primarySlotId
+                ? {
+                    ...el,
+                    x: Number(((nextBox.x / 1920) * 100).toFixed(2)),
+                    y: Number(((nextBox.y / 1080) * 100).toFixed(2)),
+                    w: Number(((nextBox.w / 1920) * 100).toFixed(2)),
+                    h: Number(((nextBox.h / 1080) * 100).toFixed(2)),
+                  }
+                : el
+            ),
+          });
+        } else {
+          upd({
+            elementLayouts: {
+              ...(cur.elementLayouts || {}),
+              [session.primarySlotId]: nextBox,
+            },
+          });
+        }
+      }
+    };
+
+    const onUp = () => {
+      if (moved) {
+        lastDraggedAtRef.current = Date.now();
+      }
+      setActiveGuides([]);
+      setActiveDistanceGuides([]);
+      setCompDrag(null);
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [compDrag]);
+
+  // Marquee drag selection effect on slide canvas background
+  useEffect(() => {
+    if (!canEditComponents) return;
+
+    const onPointerMove = (e: PointerEvent) => {
+      const start = marqueeStartRef.current;
+      if (!start) return;
+      const canvas = canvasBoxRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+
+      const curCanvasX = Math.max(0, Math.min(1920, ((e.clientX - rect.left) / rect.width) * 1920));
+      const curCanvasY = Math.max(0, Math.min(1080, ((e.clientY - rect.top) / rect.height) * 1080));
+
+      const dx = Math.abs(e.clientX - start.clientX);
+      const dy = Math.abs(e.clientY - start.clientY);
+      if (dx < 6 && dy < 6 && !marqueeBox) return;
+
+      const boxX = Math.min(start.canvasX, curCanvasX);
+      const boxY = Math.min(start.canvasY, curCanvasY);
+      const boxW = Math.max(4, Math.abs(curCanvasX - start.canvasX));
+      const boxH = Math.max(4, Math.abs(curCanvasY - start.canvasY));
+      setMarqueeBox({ x: boxX, y: boxY, w: boxW, h: boxH });
+
+      // Determine all selectable elements intersecting marquee
+      const slotElements = canvas.querySelectorAll<HTMLElement>('[data-slot-id]');
+      const intersectingIds: string[] = [];
+
+      slotElements.forEach((el) => {
+        const slotId = el.getAttribute('data-slot-id');
+        if (!slotId || slotId.includes('-overlay')) return;
+        const elRect = el.getBoundingClientRect();
+        const elX = ((elRect.left - rect.left) / rect.width) * 1920;
+        const elY = ((elRect.top - rect.top) / rect.height) * 1080;
+        const elW = (elRect.width / rect.width) * 1920;
+        const elH = (elRect.height / rect.height) * 1080;
+
+        const intersects =
+          boxX <= elX + elW &&
+          boxX + boxW >= elX &&
+          boxY <= elY + elH &&
+          boxY + boxH >= elY;
+
+        if (intersects) {
+          intersectingIds.push(slotId);
+        }
+      });
+
+      if (start.ctrl) {
+        setSelectedIds((prev) => Array.from(new Set([...prev, ...intersectingIds])));
+      } else {
+        setSelectedIds(intersectingIds);
+      }
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      const start = marqueeStartRef.current;
+      if (start) {
+        const dx = Math.abs(e.clientX - start.clientX);
+        const dy = Math.abs(e.clientY - start.clientY);
+        if (dx < 5 && dy < 5 && !start.ctrl) {
+          setSelectedIds([]);
+        }
+      }
+      marqueeStartRef.current = null;
+      setMarqueeBox(null);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+  }, [canEditComponents, marqueeBox]);
+
+  const updateBlock = (blockId: string, patch: Partial<SlideTextBlock>) => {
+    if (!onUpdateSlide) return;
+    onUpdateSlide({
+      bodyBlocks: slide.bodyBlocks.map((b) =>
+        b.id === blockId ? { ...b, ...patch } : b
+      ),
+    });
+  };
+
+  const neutralAccent = hideWaveBackground ? '#334155' : palette.accent;
+  const neutralDark = hideWaveBackground ? '#0F172A' : palette.darkInk;
+  const neutralBorder = hideWaveBackground ? '#CBD5E1' : palette.borderAccent;
+  const hiddenSet = new Set(slide.hiddenElementIds || []);
+  const movedOverlays: React.ReactNode[] = [];
 
   const updateSlotLayout = (slotId: string, patch: Partial<ElementBoxOverride>) => {
     const upd = latestUpdateRef.current;
@@ -1102,6 +1390,102 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       },
     };
     upd({ elementLayouts: nextLayouts });
+  };
+
+  // Multi-selection bounding box and alignment helpers
+  const getSlotBox = (slotId: string): ElementBoxOverride | null => {
+    const existing = slide.elementLayouts?.[slotId];
+    if (existing) return existing;
+    return measureSlotBox(slotId);
+  };
+
+  const groupBBox = useMemo(() => {
+    if (selectedIds.length <= 1) return null;
+    const boxes = selectedIds
+      .map((id) => getSlotBox(id))
+      .filter((b): b is ElementBoxOverride => Boolean(b));
+    if (boxes.length === 0) return null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    boxes.forEach((b) => {
+      minX = Math.min(minX, b.x);
+      minY = Math.min(minY, b.y);
+      maxX = Math.max(maxX, b.x + b.w);
+      maxY = Math.max(maxY, b.y + b.h);
+    });
+    return {
+      x: minX,
+      y: minY,
+      w: maxX - minX,
+      h: maxY - minY,
+    };
+  }, [selectedIds, slide.elementLayouts]);
+
+  const alignSelectedLeft = () => {
+    if (selectedIds.length < 2 || !onUpdateSlide) return;
+    const items = selectedIds
+      .map((id) => ({ id, box: getSlotBox(id) }))
+      .filter((i): i is { id: string; box: ElementBoxOverride } => Boolean(i.box));
+    if (items.length < 2) return;
+    const minX = Math.min(...items.map((i) => i.box.x));
+    const nextLayouts = { ...(slide.elementLayouts || {}) };
+    items.forEach((item) => {
+      nextLayouts[item.id] = { ...item.box, x: minX };
+    });
+    onUpdateSlide({ elementLayouts: nextLayouts });
+  };
+
+  const alignSelectedCenter = () => {
+    if (selectedIds.length < 2 || !onUpdateSlide) return;
+    const items = selectedIds
+      .map((id) => ({ id, box: getSlotBox(id) }))
+      .filter((i): i is { id: string; box: ElementBoxOverride } => Boolean(i.box));
+    if (items.length < 2) return;
+    const avgCenter = Math.round(
+      items.reduce((sum, i) => sum + i.box.x + i.box.w / 2, 0) / items.length
+    );
+    const nextLayouts = { ...(slide.elementLayouts || {}) };
+    items.forEach((item) => {
+      nextLayouts[item.id] = { ...item.box, x: Math.round(avgCenter - item.box.w / 2) };
+    });
+    onUpdateSlide({ elementLayouts: nextLayouts });
+  };
+
+  const alignSelectedTop = () => {
+    if (selectedIds.length < 2 || !onUpdateSlide) return;
+    const items = selectedIds
+      .map((id) => ({ id, box: getSlotBox(id) }))
+      .filter((i): i is { id: string; box: ElementBoxOverride } => Boolean(i.box));
+    if (items.length < 2) return;
+    const minY = Math.min(...items.map((i) => i.box.y));
+    const nextLayouts = { ...(slide.elementLayouts || {}) };
+    items.forEach((item) => {
+      nextLayouts[item.id] = { ...item.box, y: minY };
+    });
+    onUpdateSlide({ elementLayouts: nextLayouts });
+  };
+
+  const distributeSelectedHorizontally = () => {
+    if (selectedIds.length < 3 || !onUpdateSlide) return;
+    const items = selectedIds
+      .map((id) => ({ id, box: getSlotBox(id) }))
+      .filter((i): i is { id: string; box: ElementBoxOverride } => Boolean(i.box));
+    if (items.length < 3) return;
+    items.sort((a, b) => a.box.x - b.box.x);
+    const first = items[0];
+    const last = items[items.length - 1];
+    const totalSpan = last.box.x + last.box.w - first.box.x;
+    const totalItemsW = items.reduce((sum, i) => sum + i.box.w, 0);
+    const gap = Math.max(12, Math.round((totalSpan - totalItemsW) / (items.length - 1)));
+    const nextLayouts = { ...(slide.elementLayouts || {}) };
+    let curX = first.box.x;
+    items.forEach((item) => {
+      nextLayouts[item.id] = { ...item.box, x: curX };
+      curX += item.box.w + gap;
+    });
+    onUpdateSlide({ elementLayouts: nextLayouts });
   };
 
   interface PlaceSlotOptions {
@@ -1136,6 +1520,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         : override?.layer === 'bottom';
     const isBoxed =
       opts.isBoxed !== undefined ? opts.isBoxed : Boolean(override?.boxed);
+    const isSlotSelected = canEditComponents && selectedIds.includes(slotId);
 
     const wrapped = (
       <InteractiveSlot
@@ -1143,14 +1528,15 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         id={slotId}
         override={override}
         editable={canEditComponents}
-        isSelected={canEditComponents && activeSelectedId === slotId}
+        isSelected={isSlotSelected}
+        showSingleToolbar={selectedIds.length <= 1}
         isBoxed={isBoxed}
         isBottomLayer={isBottom}
         showBoxToggle={opts.showBoxToggle}
         showLayerToggle={opts.showLayerToggle}
         stretchHeight={opts.stretchHeight}
         className={opts.className}
-        onSelect={() => setSelectedId(slotId)}
+        onSelect={(isCtrl) => handleSelectSlot(slotId, isCtrl)}
         onStartDrag={(e, slotEl, mode, minDelta) =>
           handleStartSlotDrag(slotId, e, slotEl, mode, minDelta, {
             layer: isBottom ? 'bottom' : 'top',
@@ -2820,7 +3206,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           : el.boxed !== undefined
           ? el.boxed
           : false;
-      const isSelectedEl = canEditComponents && activeSelectedId === el.id;
+      const isSelectedEl = canEditComponents && selectedIds.includes(el.id);
 
       const updateCustomEl = (patch: Partial<BespokeCanvasElement>) => {
         onUpdateSlide?.({
@@ -2986,12 +3372,13 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           override={boxOverride}
           editable={canEditComponents}
           isSelected={isSelectedEl}
+          showSingleToolbar={selectedIds.length <= 1}
           isBoxed={isBoxed}
           isBottomLayer={effectiveLayer === 'bottom'}
           showBoxToggle={!isMedia || el.kind === 'diagram'}
           showLayerToggle={!isMedia}
           stretchHeight
-          onSelect={() => setSelectedId(el.id)}
+          onSelect={(isCtrl) => handleSelectSlot(el.id, isCtrl)}
           onStartDrag={(e, slotEl, mode, minDelta) =>
             handleStartSlotDrag(el.id, e, slotEl, mode, minDelta, boxOverride)
           }
@@ -3031,9 +3418,6 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      onClick={() => {
-        if (canEditComponents) setSelectedId(null);
-      }}
       className="relative w-full aspect-video overflow-hidden select-none shadow-md"
       style={{
         backgroundColor: hideWaveBackground ? '#F4F4F5' : palette.layers[3],
@@ -3042,6 +3426,31 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       {/* Scaled 1920x1080 Fixed Coordinate Slide Canvas */}
       <div
         ref={canvasBoxRef}
+        onPointerDown={(e) => {
+          if (!canEditComponents) return;
+          if (e.button !== 0) return;
+          const target = e.target as HTMLElement;
+          if (
+            target.closest(
+              '[data-slot-id], button, input, textarea, select, [data-no-drag]'
+            )
+          ) {
+            return;
+          }
+          const canvas = canvasBoxRef.current;
+          if (!canvas) return;
+          const rect = canvas.getBoundingClientRect();
+          if (!rect.width || !rect.height) return;
+          const canvasX = ((e.clientX - rect.left) / rect.width) * 1920;
+          const canvasY = ((e.clientY - rect.top) / rect.height) * 1080;
+          marqueeStartRef.current = {
+            clientX: e.clientX,
+            clientY: e.clientY,
+            canvasX,
+            canvasY,
+            ctrl: e.ctrlKey || e.metaKey,
+          };
+        }}
         onClickCapture={(e) => {
           if (Date.now() - lastDraggedAtRef.current < 180) {
             e.stopPropagation();
@@ -3249,6 +3658,259 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               )}
             </svg>
           )}
+
+        {/* Marquee Drag Selection Box */}
+        {marqueeBox && (
+          <div
+            className="absolute pointer-events-none z-50 border-2 border-sky-400 bg-sky-400/20 rounded-xl shadow-lg backdrop-blur-[1px]"
+            style={{
+              left: marqueeBox.x,
+              top: marqueeBox.y,
+              width: marqueeBox.w,
+              height: marqueeBox.h,
+            }}
+          />
+        )}
+
+        {/* Floating Multi-Selection Group Toolbar */}
+        {selectedIds.length > 1 && groupBBox && canEditComponents && (
+          <div
+            data-no-drag="true"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            className="absolute z-50 flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-zinc-900/95 text-white shadow-2xl border border-zinc-700 whitespace-nowrap animate-fade-in"
+            style={{
+              left: Math.max(40, Math.min(1920 - 520, groupBBox.x)),
+              top: Math.max(16, groupBBox.y - 64),
+            }}
+          >
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-sky-500/25 text-sky-300 text-[16px] font-black border border-sky-400/40">
+              <span>{selectedIds.length} items</span>
+            </div>
+            <div className="w-[1px] h-6 bg-zinc-700 mx-1" />
+            <button
+              type="button"
+              onClick={alignSelectedLeft}
+              title="Align selected items to left edge"
+              className="p-2 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition flex items-center gap-1 text-[15px] font-bold"
+            >
+              <AlignLeft size={20} />
+              <span className="hidden sm:inline">Left</span>
+            </button>
+            <button
+              type="button"
+              onClick={alignSelectedCenter}
+              title="Align selected items horizontally centered"
+              className="p-2 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition flex items-center gap-1 text-[15px] font-bold"
+            >
+              <AlignCenter size={20} />
+              <span className="hidden sm:inline">Center</span>
+            </button>
+            <button
+              type="button"
+              onClick={alignSelectedTop}
+              title="Align selected items to top edge"
+              className="p-2 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition flex items-center gap-1 text-[15px] font-bold"
+            >
+              <Move size={20} className="rotate-90" />
+              <span className="hidden sm:inline">Top</span>
+            </button>
+            {selectedIds.length >= 3 && (
+              <button
+                type="button"
+                onClick={distributeSelectedHorizontally}
+                title="Distribute items with equal horizontal spacing"
+                className="p-2 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition flex items-center gap-1 text-[15px] font-bold"
+              >
+                <AlignJustify size={20} />
+                <span className="hidden sm:inline">Distribute</span>
+              </button>
+            )}
+            <div className="w-[1px] h-6 bg-zinc-700 mx-1" />
+            <button
+              type="button"
+              onClick={() => deleteSlots(selectedIds)}
+              title="Delete all selected items (or press Delete key)"
+              className="p-2 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white transition flex items-center gap-1 text-[15px] font-bold"
+            >
+              <Trash2 size={20} />
+              <span>Delete</span>
+            </button>
+          </div>
+        )}
+
+        {/* Dynamic Snap Guidelines and Equal Spacing Badges */}
+        {(activeGuides.length > 0 || activeDistanceGuides.length > 0) && (
+          <svg
+            viewBox="0 0 1920 1080"
+            className="absolute inset-0 w-full h-full z-40 pointer-events-none overflow-visible"
+          >
+            {activeGuides.map((guide, idx) => (
+              <g key={`snap-guide-${idx}`}>
+                <line
+                  x1={guide.orientation === 'vertical' ? guide.pos : guide.start}
+                  y1={guide.orientation === 'vertical' ? guide.start : guide.pos}
+                  x2={guide.orientation === 'vertical' ? guide.pos : guide.end}
+                  y2={guide.orientation === 'vertical' ? guide.end : guide.pos}
+                  stroke="#00E5FF"
+                  strokeWidth={3}
+                  strokeDasharray="8 6"
+                  strokeLinecap="round"
+                />
+                {guide.orientation === 'vertical' ? (
+                  <>
+                    <line
+                      x1={guide.pos - 8}
+                      y1={guide.start}
+                      x2={guide.pos + 8}
+                      y2={guide.start}
+                      stroke="#00E5FF"
+                      strokeWidth={3}
+                    />
+                    <line
+                      x1={guide.pos - 8}
+                      y1={guide.end}
+                      x2={guide.pos + 8}
+                      y2={guide.end}
+                      stroke="#00E5FF"
+                      strokeWidth={3}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <line
+                      x1={guide.start}
+                      y1={guide.pos - 8}
+                      x2={guide.start}
+                      y2={guide.pos + 8}
+                      stroke="#00E5FF"
+                      strokeWidth={3}
+                    />
+                    <line
+                      x1={guide.end}
+                      y1={guide.pos - 8}
+                      x2={guide.end}
+                      y2={guide.pos + 8}
+                      stroke="#00E5FF"
+                      strokeWidth={3}
+                    />
+                  </>
+                )}
+              </g>
+            ))}
+
+            {activeDistanceGuides.map((dg, idx) => {
+              const mid = (dg.start + dg.end) / 2;
+              return (
+                <g key={`dist-guide-${idx}`}>
+                  <line
+                    x1={dg.orientation === 'horizontal' ? dg.start : dg.crossPos}
+                    y1={dg.orientation === 'horizontal' ? dg.crossPos : dg.start}
+                    x2={dg.orientation === 'horizontal' ? dg.end : dg.crossPos}
+                    y2={dg.orientation === 'horizontal' ? dg.crossPos : dg.end}
+                    stroke="#10B981"
+                    strokeWidth={2.5}
+                  />
+                  {dg.orientation === 'horizontal' ? (
+                    <>
+                      <line
+                        x1={dg.start}
+                        y1={dg.crossPos - 6}
+                        x2={dg.start}
+                        y2={dg.crossPos + 6}
+                        stroke="#10B981"
+                        strokeWidth={2.5}
+                      />
+                      <line
+                        x1={dg.end}
+                        y1={dg.crossPos - 6}
+                        x2={dg.end}
+                        y2={dg.crossPos + 6}
+                        stroke="#10B981"
+                        strokeWidth={2.5}
+                      />
+                      <rect
+                        x={mid - 32}
+                        y={dg.crossPos - 14}
+                        width={64}
+                        height={28}
+                        rx={8}
+                        fill="#064E3B"
+                        stroke="#34D399"
+                        strokeWidth={2}
+                      />
+                      <text
+                        x={mid}
+                        y={dg.crossPos + 5}
+                        textAnchor="middle"
+                        fontSize="14"
+                        fontWeight="800"
+                        fill="#ECFDF5"
+                      >
+                        {Math.round(dg.distance)}px
+                      </text>
+                    </>
+                  ) : (
+                    <>
+                      <line
+                        x1={dg.crossPos - 6}
+                        y1={dg.start}
+                        x2={dg.crossPos + 6}
+                        y2={dg.start}
+                        stroke="#10B981"
+                        strokeWidth={2.5}
+                      />
+                      <line
+                        x1={dg.crossPos - 6}
+                        y1={dg.end}
+                        x2={dg.crossPos + 6}
+                        y2={dg.end}
+                        stroke="#10B981"
+                        strokeWidth={2.5}
+                      />
+                      <rect
+                        x={dg.crossPos - 32}
+                        y={mid - 14}
+                        width={64}
+                        height={28}
+                        rx={8}
+                        fill="#064E3B"
+                        stroke="#34D399"
+                        strokeWidth={2}
+                      />
+                      <text
+                        x={dg.crossPos}
+                        y={mid + 5}
+                        textAnchor="middle"
+                        fontSize="14"
+                        fontWeight="800"
+                        fill="#ECFDF5"
+                      >
+                        {Math.round(dg.distance)}px
+                      </text>
+                    </>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+        )}
+
+        {/* Snapping / Freeform Indicator Pill */}
+        {compDrag && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-zinc-950/90 backdrop-blur-md text-white text-[15px] font-bold shadow-2xl border border-zinc-700/80 flex items-center gap-2.5 pointer-events-none animate-fade-in">
+            <div
+              className={`w-2.5 h-2.5 rounded-full ${
+                isShiftHeld ? 'bg-amber-400' : 'bg-cyan-400 animate-pulse'
+              }`}
+            />
+            <span>
+              {isShiftHeld
+                ? 'Freeform mode (Snapping disabled • Shift held)'
+                : 'Smart Snapping active (Edges, Centers, Equal Spacing) • Hold Shift for freeform'}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

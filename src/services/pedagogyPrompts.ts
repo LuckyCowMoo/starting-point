@@ -205,7 +205,7 @@ NON-NEGOTIABLE SLIDE WRITING & LAYOUT RULES:
        - "identify-picture-open": Visual diagram or picture with open whiteboard question ("imagePrompt": "...", no options, model "answer").
        - "open-ended": Direct whiteboard prompt without MC (no options, model "answer").
    - **Slide 2 ("lesson-title-page")**: Concise topic "title" (<= 5 words), readable "lessonDate", conversational second-person "bigQuestion" hook, optional 2–3 "keyTermsStrip" terms, and "suggestedMediaQuery".
-   - **When Standard Presets Do Not Fit**: Use "presetId": "custom" with non-overlapping "customCanvasElements" and an inline <svg viewBox="0 0 800 420"> diagram (such as a clean place-value grid, state table, or labelled architecture visual), or set "teacherDesignNote" if custom teacher artwork is needed.
+   - **When Standard Presets Do Not Fit**: Use "presetId": "custom" with non-overlapping "customCanvasElements" and an inline <svg viewBox='0 0 800 420'> diagram (always use single quotes for SVG attributes, e.g. <rect fill='#fff'/>), or set "teacherDesignNote" if custom teacher artwork is needed.
 
 10. OVERRIDE BAD BLUEPRINT PRESETS & STRIP META PREFIXES:
    - If a blueprint slide's "presetId" does not fit the number of items (e.g. "vocab-single-term-focus" used for 3 terms), upgrade the "presetId" to the appropriate preset (e.g. "vocabulary-spotlight"). Always strip blueprint prefixes like "Hinge Check:", "Task 1:", or "Plenary:" from the final pupil-facing "title".
@@ -268,7 +268,8 @@ ${
     : ''
 }
 
-Return ONLY valid JSON matching this exact schema (plain direct prose, zero cheesy quips or sayings):
+Return ONLY valid JSON wrapped inside a single \`\`\`json \`\`\` code block matching this exact schema (plain direct prose, zero cheesy quips or sayings):
+\`\`\`json
 {
   "know": [{ "id": "know-1", "statement": "...", "bloomLevel": "Remember|Understand", "pedagogicalRationale": "..." }],
   "do": [{ "id": "do-1", "statement": "...", "bloomLevel": "Apply|Analyse|Evaluate", "pedagogicalRationale": "..." }],
@@ -278,6 +279,7 @@ Return ONLY valid JSON matching this exact schema (plain direct prose, zero chee
   "prerequisiteKnowledge": ["Topics from the previous unit needed for Lesson 1 retrieval"],
   "pedagogicalSummary": "2-3 direct sentences explaining how this contract respects the teacher's brief and lesson timing."
 }
+\`\`\`
 `.trim();
 }
 
@@ -339,7 +341,8 @@ ${
     : ''
 }
 
-Return ONLY valid JSON with key "lessons" (titles <= 5 words; 1–2 timed activities per lesson; starter = retrieval ONLY from previously taught units/lessons, never new material; zero cheesy quips):
+Return ONLY valid JSON wrapped inside a single \`\`\`json \`\`\` code block with key "lessons" (titles <= 5 words; 1–2 timed activities per lesson; starter = retrieval ONLY from previously taught units/lessons, never new material; zero cheesy quips):
+\`\`\`json
 {
   "lessons": [
     {
@@ -361,6 +364,7 @@ Return ONLY valid JSON with key "lessons" (titles <= 5 words; 1–2 timed activi
     }
   ]
 }
+\`\`\`
 `.trim();
 }
 
@@ -437,7 +441,8 @@ ${presetList}
 AVAILABLE ROUTINE ICONS:
 "write-in-books", "mwb-question", "pair-discussion", "independent-task", "key-vocab", "extension-challenge", "silent-think"
 
-Return ONLY valid JSON (all slide titles <= 5 words; 1 pedagogical job per slide; immediate Answer-Reveal slide after every check/task; starter = retrieval ONLY; zero parenthetical task tags in titles; zero cheesy AI quips):
+Return ONLY valid JSON wrapped inside a single \`\`\`json \`\`\` code block with key "slidesBlueprint" (all slide titles <= 5 words; 1 pedagogical job per slide; immediate Answer-Reveal slide after every check/task; starter = retrieval ONLY; zero parenthetical task tags in titles; zero cheesy AI quips):
+\`\`\`json
 {
   "slidesBlueprint": [
     {
@@ -458,6 +463,7 @@ Return ONLY valid JSON (all slide titles <= 5 words; 1 pedagogical job per slide
     }
   ]
 }
+\`\`\`
 `.trim();
 }
 
@@ -530,7 +536,9 @@ SUMMARY OF CLASSROOM-READY SLIDE RULES:
 - TABLES & COMPARISONS: When presenting structured tabular information (binary/denary place value grids, truth tables, calculation steps, comparisons), use "tableData" with { "rows": X, "cols": Y, "headers": [...], "cells": [[...]] } or "customCanvasElements" with "kind": "table". Fill each cell with clean, concise content—NEVER smash grids into a single messy inline text string.
 - Choose an appropriate "waveVariant" from: ${waveKeys}.
 
-Return ONLY valid JSON:
+Return ONLY valid JSON wrapped inside a single \`\`\`json \`\`\` code block with key "slides" (never output bare raw JSON outside code blocks).
+CRITICAL FOR SVG / HTML: Inside any "svgCode", inline SVG, or HTML attribute strings, ALWAYS use single quotes (e.g. <svg viewBox='0 0 800 420' fill='none'>) so double quotes are never escaped inside JSON string values.
+\`\`\`json
 {
   "slides": [
     {
@@ -561,6 +569,7 @@ Return ONLY valid JSON:
     }
   ]
 }
+\`\`\`
 `.trim();
 }
 
@@ -598,7 +607,9 @@ CONTEXT:
 - Phase: ${slide.phase}
 - Teacher's Bespoke Design Request: "${customRequest}"
 
-Return ONLY valid JSON:
+Return ONLY valid JSON wrapped inside a single \`\`\`json \`\`\` code block (never output bare raw JSON outside code blocks).
+CRITICAL FOR SVG / HTML: Inside any "svgCode", inline SVG, or HTML attribute strings, ALWAYS use single quotes (e.g. <svg viewBox='0 0 640 400' fill='none'>) so double quotes are never escaped inside JSON string values.
+\`\`\`json
 {
   "title": "Max 5 words",
   "phase": "${slide.phase}",
@@ -626,5 +637,6 @@ Return ONLY valid JSON:
     }
   ]
 }
+\`\`\`
 `.trim();
 }

@@ -1,5 +1,6 @@
 import {
   BespokeCanvasElement,
+  LessonPhase,
   LessonSequence,
   PaperCutLayer,
   PlannedLesson,
@@ -316,11 +317,14 @@ export async function runBespokeSlideDesign(
 }
 
 export function extractJsonFromLlmResponse<T>(rawText: string): T {
-  const cleaned = rawText
+  let cleaned = rawText
     .replace(/^\uFEFF/, '')
     .replace(/```json\s*/gi, '')
     .replace(/```\s*/g, '')
     .trim();
+
+  // Normalize smart/curly quotes that chat interfaces sometimes inject
+  cleaned = cleaned.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
 
   const firstBrace = cleaned.indexOf('{');
   const firstBracket = cleaned.indexOf('[');
@@ -340,7 +344,25 @@ export function extractJsonFromLlmResponse<T>(rawText: string): T {
       ? cleaned.slice(startIdx, endIdx + 1)
       : cleaned;
 
-  return JSON.parse(slice) as T;
+  try {
+    return JSON.parse(slice) as T;
+  } catch (initialErr) {
+    // 1. Remove trailing commas before } or ]
+    const withoutTrailingCommas = slice.replace(/,\s*([\]}])/g, '$1');
+    try {
+      return JSON.parse(withoutTrailingCommas) as T;
+    } catch {
+      // 2. Repair unescaped double quotes inside XML/HTML/SVG tags like <svg viewBox="0 0 800 420" fill="none">
+      const tagRepaired = withoutTrailingCommas.replace(/(<[a-zA-Z][^>]*>)/g, (tag) => {
+        return tag.replace(/(\w+)=["']([^"']*)["']/g, "$1='$2'");
+      });
+      try {
+        return JSON.parse(tagRepaired) as T;
+      } catch {
+        throw initialErr;
+      }
+    }
+  }
 }
 
 export function parseStage1Response(rawText: string): SequenceObjectives {
@@ -404,21 +426,28 @@ export function parseStage2Response(
 
 export function parseStage3BlueprintResponse(rawText: string): SlideBlueprint[] {
   const res = extractJsonFromLlmResponse<
-    { slidesBlueprint?: Partial<SlideBlueprint>[] } | Partial<SlideBlueprint>[]
+    | { slidesBlueprint?: Partial<SlideBlueprint>[]; blueprints?: Partial<SlideBlueprint>[]; slides?: any[] }
+    | Partial<SlideBlueprint>[]
   >(rawText);
-  const rawList = Array.isArray(res) ? res : res.slidesBlueprint || [];
+  const rawList = Array.isArray(res)
+    ? res
+    : (res as any).slidesBlueprint || (res as any).blueprints || (res as any).slides || [];
   if (rawList.length === 0) {
-    throw new Error('JSON response did not contain a non-empty "slidesBlueprint" array.');
+    throw new Error('JSON response did not contain a non-empty "slidesBlueprint" or "slides" array.');
   }
 
-  return rawList.map((bp, idx) => ({
-    id: bp.id || `bp-${Date.now()}-${idx + 1}`,
+  return rawList.map((bp: any, idx: number) => ({
+    id: bp.id || bp.blueprintId || `bp-${Date.now()}-${idx + 1}`,
     slideNumber: bp.slideNumber || idx + 1,
     title: bp.title || `Slide ${idx + 1}`,
     phase: bp.phase || 'explanation',
     presetId: bp.presetId || 'split-concept-dual-code',
     allocatedMinutes: Math.max(1, Number(bp.allocatedMinutes) || 5),
-    contentSummary: bp.contentSummary || '',
+    contentSummary:
+      bp.contentSummary ||
+      (Array.isArray(bp.bodyBlocks)
+        ? bp.bodyBlocks.map((b: any) => b.content).filter(Boolean).join(' ')
+        : ''),
     pupilActivity: bp.pupilActivity || '',
     routineIcons: bp.routineIcons || ['write-in-books'],
     conceptsIntroducedHere: bp.conceptsIntroducedHere || [],
@@ -447,9 +476,12 @@ export function parseStage4SlidesResponse(
   targetSlideId?: string
 ): SlideData[] {
   const res = extractJsonFromLlmResponse<
-    { slides?: Partial<SlideData>[] } | Partial<SlideData>[]
+    | { slides?: Partial<SlideData>[]; slidesData?: Partial<SlideData>[]; slidesBlueprint?: any[]; blueprints?: any[] }
+    | Partial<SlideData>[]
   >(rawText);
-  const incoming = Array.isArray(res) ? res : res.slides || [];
+  const incoming: Partial<SlideData>[] = Array.isArray(res)
+    ? res
+    : (res as any).slides || (res as any).slidesData || (res as any).slidesBlueprint || (res as any).blueprints || [];
   if (incoming.length === 0) {
     throw new Error('JSON response did not contain a non-empty "slides" array.');
   }
@@ -460,7 +492,7 @@ export function parseStage4SlidesResponse(
       lesson.slidesBlueprint.find((b) => b.slideNumber === s.slideNumber) ||
       lesson.slidesBlueprint[idx];
     const presetId = s.presetId || bp?.presetId || 'split-concept-dual-code';
-    const phase = s.phase || bp?.phase || 'explanation';
+    const phase: LessonPhase = (s.phase || bp?.phase || 'explanation') as LessonPhase;
     const preset = SLIDE_PRESETS.find((p) => p.id === presetId);
     const waveVariant =
       s.waveVariant ||

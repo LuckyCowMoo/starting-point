@@ -142,6 +142,10 @@ export const PromptCopyPasteModal: React.FC<PromptCopyPasteModalProps> = ({
               className="w-full p-3 rounded-xl border border-zinc-300 bg-[#FAF6F0]/40 text-xs font-mono text-zinc-800 leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
 
+            <p className="text-[11.5px] text-zinc-500">
+              Tip: Copy the complete <code className="text-zinc-700 bg-zinc-100 px-1 py-0.5 rounded">```json ... ```</code> code block returned by ChatGPT, Claude, or Gemini. Any chat formatting, quotes, or SVG diagrams are automatically sanitized and repaired.
+            </p>
+
             {error && (
               <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
                 <AlertCircle size={15} className="shrink-0 mt-0.5" />

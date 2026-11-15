@@ -30,6 +30,7 @@ import {
   SLIDE_PRESETS,
 } from '../../data/palettes';
 import {
+  extractJsonFromLlmResponse,
   parseStage3BlueprintResponse,
   parseStage4SlidesResponse,
   runStage3BlueprintGeneration,
@@ -812,7 +813,22 @@ export const Stage3BlueprintView: React.FC<Stage3BlueprintViewProps> = ({
         }
         onClose={() => setPromptModalTarget(null)}
         onApplyResponse={(raw) => {
-          if (promptModalTarget === 'stage4-all') {
+          let parsedAny: any = null;
+          try {
+            parsedAny = extractJsonFromLlmResponse(raw);
+          } catch {}
+
+          const hasStage4Slides =
+            parsedAny &&
+            (Array.isArray(parsedAny.slides) ||
+              Array.isArray(parsedAny.slidesData) ||
+              (Array.isArray(parsedAny) &&
+                parsedAny.some(
+                  (s: any) =>
+                    s.bodyBlocks || s.starterQuadrants || s.elementLayouts
+                )));
+
+          if (promptModalTarget === 'stage4-all' || hasStage4Slides) {
             const slides = parseStage4SlidesResponse(raw, lesson);
             updateLesson({ stage3Approved: true, slidesData: slides });
             onOpenStage4Studio(lesson.id);

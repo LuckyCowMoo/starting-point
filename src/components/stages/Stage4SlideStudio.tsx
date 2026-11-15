@@ -438,8 +438,11 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
     });
   };
 
-  const updateActiveSlide = (patch: Partial<SlideData>) => {
-    recordManualHistory();
+  const updateActiveSlide = (patch: Partial<SlideData>, isTransient = false) => {
+    if (!lesson) return;
+    if (!isTransient) {
+      recordManualHistory();
+    }
     updateLesson({
       slidesData: lesson.slidesData.map((s) =>
         s.id === slide.id ? { ...s, ...patch } : s
@@ -1128,6 +1131,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                 setSelectedElementId(ids[0] || null);
               }}
               onUpdateSlide={updateActiveSlide}
+              onDragStartHistory={recordManualHistory}
               onOpenMediaPicker={(targetElId) => {
                 setMediaTargetElementId(targetElId || null);
                 setMediaOpen(true);

@@ -146,7 +146,8 @@ interface SlideCanvasProps {
   onSelectElement?: (id: string | null) => void;
   selectedElementIds?: string[];
   onSelectElements?: (ids: string[]) => void;
-  onUpdateSlide?: (patch: Partial<SlideData>) => void;
+  onUpdateSlide?: (patch: Partial<SlideData>, isTransient?: boolean) => void;
+  onDragStartHistory?: () => void;
   onOpenMediaPicker?: (targetElementId?: string) => void;
   hoveredImageTarget?: string | null;
   onHoverImageTarget?: (targetId: string | null) => void;
@@ -630,6 +631,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   selectedElementIds: controlledSelectedIds,
   onSelectElements,
   onUpdateSlide,
+  onDragStartHistory,
   onOpenMediaPicker,
   hoveredImageTarget,
   onHoverImageTarget,
@@ -905,8 +907,10 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
 
   const latestSlideRef = useRef(slide);
   const latestUpdateRef = useRef(onUpdateSlide);
+  const latestDragHistoryRef = useRef(onDragStartHistory);
   latestSlideRef.current = slide;
   latestUpdateRef.current = onUpdateSlide;
+  latestDragHistoryRef.current = onDragStartHistory;
 
   const activeSelectedId = selectedIds[0] || null;
   const setSelectedId = (id: string | null) => {
@@ -1125,6 +1129,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         if (Math.hypot(dxScreen, dyScreen) < session.minDeltaPx) return;
         moved = true;
         lastDraggedAtRef.current = Date.now();
+        latestDragHistoryRef.current?.();
       } else {
         lastDraggedAtRef.current = Date.now();
       }
@@ -1191,10 +1196,13 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           }
         }
 
-        upd({
-          elementLayouts: nextLayouts,
-          ...(updatedCustomEls ? { customCanvasElements: updatedCustomEls } : {}),
-        });
+        upd(
+          {
+            elementLayouts: nextLayouts,
+            ...(updatedCustomEls ? { customCanvasElements: updatedCustomEls } : {}),
+          },
+          true
+        );
       } else {
         // Resize mode for primary selected element
         setActiveGuides([]);
@@ -1237,30 +1245,36 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           (el) => el.id === session.primarySlotId
         );
         if (hasCustomEl && cur.customCanvasElements) {
-          upd({
-            elementLayouts: {
-              ...(cur.elementLayouts || {}),
-              [session.primarySlotId]: nextBox,
+          upd(
+            {
+              elementLayouts: {
+                ...(cur.elementLayouts || {}),
+                [session.primarySlotId]: nextBox,
+              },
+              customCanvasElements: cur.customCanvasElements.map((el) =>
+                el.id === session.primarySlotId
+                  ? {
+                      ...el,
+                      x: Number(((nextBox.x / 1920) * 100).toFixed(2)),
+                      y: Number(((nextBox.y / 1080) * 100).toFixed(2)),
+                      w: Number(((nextBox.w / 1920) * 100).toFixed(2)),
+                      h: Number(((nextBox.h / 1080) * 100).toFixed(2)),
+                    }
+                  : el
+              ),
             },
-            customCanvasElements: cur.customCanvasElements.map((el) =>
-              el.id === session.primarySlotId
-                ? {
-                    ...el,
-                    x: Number(((nextBox.x / 1920) * 100).toFixed(2)),
-                    y: Number(((nextBox.y / 1080) * 100).toFixed(2)),
-                    w: Number(((nextBox.w / 1920) * 100).toFixed(2)),
-                    h: Number(((nextBox.h / 1080) * 100).toFixed(2)),
-                  }
-                : el
-            ),
-          });
+            true
+          );
         } else {
-          upd({
-            elementLayouts: {
-              ...(cur.elementLayouts || {}),
-              [session.primarySlotId]: nextBox,
+          upd(
+            {
+              elementLayouts: {
+                ...(cur.elementLayouts || {}),
+                [session.primarySlotId]: nextBox,
+              },
             },
-          });
+            true
+          );
         }
       }
     };

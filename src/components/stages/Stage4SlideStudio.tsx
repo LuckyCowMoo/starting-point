@@ -142,6 +142,111 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Resizable Side Panels (Left Slide Filmstrip & Right Inspector)
+  const DEFAULT_LEFT_WIDTH = 180;
+  const MIN_LEFT_WIDTH = 120;
+  const MAX_LEFT_WIDTH = 500;
+
+  const DEFAULT_RIGHT_WIDTH = 320;
+  const MIN_RIGHT_WIDTH = 260;
+  const MAX_RIGHT_WIDTH = 750;
+
+  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('starting_point_studio_left_width');
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && parsed >= MIN_LEFT_WIDTH && parsed <= MAX_LEFT_WIDTH) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return DEFAULT_LEFT_WIDTH;
+  });
+
+  const [rightPanelWidth, setRightPanelWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('starting_point_studio_right_width');
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && parsed >= MIN_RIGHT_WIDTH && parsed <= MAX_RIGHT_WIDTH) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return DEFAULT_RIGHT_WIDTH;
+  });
+
+  const [resizingSide, setResizingSide] = useState<'left' | 'right' | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('starting_point_studio_left_width', String(leftPanelWidth));
+    } catch {}
+  }, [leftPanelWidth]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('starting_point_studio_right_width', String(rightPanelWidth));
+    } catch {}
+  }, [rightPanelWidth]);
+
+  const handleLeftResizeStart = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizingSide('left');
+    const startX = e.clientX;
+    const startWidth = leftPanelWidth;
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onPointerMove = (ev: PointerEvent) => {
+      const delta = ev.clientX - startX;
+      const next = Math.max(MIN_LEFT_WIDTH, Math.min(MAX_LEFT_WIDTH, Math.round(startWidth + delta)));
+      setLeftPanelWidth(next);
+    };
+
+    const onPointerUp = () => {
+      setResizingSide(null);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  };
+
+  const handleRightResizeStart = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizingSide('right');
+    const startX = e.clientX;
+    const startWidth = rightPanelWidth;
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onPointerMove = (ev: PointerEvent) => {
+      const delta = startX - ev.clientX;
+      const next = Math.max(MIN_RIGHT_WIDTH, Math.min(MAX_RIGHT_WIDTH, Math.round(startWidth + delta)));
+      setRightPanelWidth(next);
+    };
+
+    const onPointerUp = () => {
+      setResizingSide(null);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  };
+
   const activeSlideIdForReset =
     lesson && lesson.slidesData.length > 0
       ? lesson.slidesData[Math.min(selectedSlideIdx, lesson.slidesData.length - 1)]?.id
@@ -841,9 +946,12 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
       </div>
 
       {/* Main 3-Pane Studio */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className={`flex-1 flex overflow-hidden relative ${resizingSide ? 'select-none' : ''}`}>
         {/* Left Slide Filmstrip */}
-        <div className="w-44 shrink-0 border-r border-zinc-200 bg-[#FAF6F0] overflow-y-auto p-2.5 space-y-2.5">
+        <div
+          style={{ width: `${leftPanelWidth}px` }}
+          className="shrink-0 border-r border-zinc-200 bg-[#FAF6F0] overflow-y-auto p-2.5 space-y-2.5 relative"
+        >
           {lesson.slidesData.map((s, idx) => {
             const p = PHASE_PALETTES[s.phase];
             const active = idx === safeIdx;
@@ -901,6 +1009,32 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
               <span>AI Insert Slides...</span>
             </button>
           </div>
+        </div>
+
+        {/* Left Resize Handle */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize slide filmstrip panel"
+          onPointerDown={handleLeftResizeStart}
+          onDoubleClick={() => setLeftPanelWidth(DEFAULT_LEFT_WIDTH)}
+          className={`w-2.5 -ml-1.5 -mr-1 z-30 cursor-col-resize select-none shrink-0 group relative flex items-center justify-center transition-colors ${
+            resizingSide === 'left' ? 'bg-emerald-500/30' : 'hover:bg-emerald-500/20'
+          }`}
+          title={`Drag to resize filmstrip (double-click to reset, default: ${DEFAULT_LEFT_WIDTH}px)`}
+        >
+          <div
+            className={`w-1 rounded-full transition-all ${
+              resizingSide === 'left'
+                ? 'h-16 bg-emerald-600 scale-x-125 shadow-sm'
+                : 'h-8 bg-zinc-300 group-hover:bg-emerald-500 group-hover:h-12'
+            }`}
+          />
+          {resizingSide === 'left' && (
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 px-2 py-1 rounded-md bg-zinc-900 text-white text-[11px] font-bold shadow-lg pointer-events-none whitespace-nowrap z-50">
+              {leftPanelWidth}px
+            </span>
+          )}
         </div>
 
         {/* Center 16:9 Canvas Stage */}
@@ -1355,8 +1489,37 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
           )}
         </div>
 
+        {/* Right Resize Handle */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize inspector panel"
+          onPointerDown={handleRightResizeStart}
+          onDoubleClick={() => setRightPanelWidth(DEFAULT_RIGHT_WIDTH)}
+          className={`w-2.5 -ml-1 -mr-1.5 z-30 cursor-col-resize select-none shrink-0 group relative flex items-center justify-center transition-colors ${
+            resizingSide === 'right' ? 'bg-emerald-500/30' : 'hover:bg-emerald-500/20'
+          }`}
+          title={`Drag to resize inspector (double-click to reset, default: ${DEFAULT_RIGHT_WIDTH}px)`}
+        >
+          <div
+            className={`w-1 rounded-full transition-all ${
+              resizingSide === 'right'
+                ? 'h-16 bg-emerald-600 scale-x-125 shadow-sm'
+                : 'h-8 bg-zinc-300 group-hover:bg-emerald-500 group-hover:h-12'
+            }`}
+          />
+          {resizingSide === 'right' && (
+            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 px-2 py-1 rounded-md bg-zinc-900 text-white text-[11px] font-bold shadow-lg pointer-events-none whitespace-nowrap z-50">
+              {rightPanelWidth}px
+            </span>
+          )}
+        </div>
+
         {/* Right Inspector & AI Co-Pilot */}
-        <aside className="w-76 shrink-0 border-l border-zinc-200 bg-white flex flex-col overflow-hidden">
+        <aside
+          style={{ width: `${rightPanelWidth}px` }}
+          className="shrink-0 border-l border-zinc-200 bg-white flex flex-col overflow-hidden relative"
+        >
           <div className="p-2 border-b border-zinc-200 grid grid-cols-2 gap-1 bg-[#FAF6F0]">
             <button
               onClick={() => setInspectorTab('edit')}

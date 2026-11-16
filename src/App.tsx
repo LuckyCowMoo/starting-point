@@ -197,6 +197,85 @@ export function App() {
             break;
           }
         }
+
+        // If not found in local workspace, check bundled DEMO_WORKSPACE
+        if (!restoredLessonId) {
+          for (const demoSeq of DEMO_WORKSPACE.sequences) {
+            const foundDemo = demoSeq.lessons.find(
+              (l) =>
+                (link.lessonId && l.id === link.lessonId) ||
+                (link.lessonNumber !== undefined && l.lessonNumber === link.lessonNumber) ||
+                (link.lessonId &&
+                  l.title
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, '-')
+                    .includes(link.lessonId.toLowerCase()))
+            );
+            if (foundDemo) {
+              const targetSeq =
+                activeWs.sequences.find((s) => s.id === demoSeq.id) ||
+                activeWs.sequences[0];
+              if (targetSeq) {
+                const exists = targetSeq.lessons.some((l) => l.id === foundDemo.id);
+                const updatedLessons = exists
+                  ? targetSeq.lessons.map((l) => (l.id === foundDemo.id ? foundDemo : l))
+                  : [...targetSeq.lessons, foundDemo];
+                activeWs = {
+                  ...activeWs,
+                  sequences: activeWs.sequences.map((s) =>
+                    s.id === targetSeq.id ? { ...s, lessons: updatedLessons } : s
+                  ),
+                };
+                restoredSeqId = targetSeq.id;
+                restoredLessonId = foundDemo.id;
+                restoredStage = (link.stage as StageId) || 4;
+                if (link.slideIndex !== undefined) setUrlSlideIdx(link.slideIndex);
+                if (link.present) {
+                  setPresentingState({ lessonId: foundDemo.id, slideIdx: link.slideIndex || 0 });
+                }
+                break;
+              }
+            }
+          }
+        }
+
+        // If still not found, check public/lessons/tomorrow.json
+        if (!restoredLessonId) {
+          try {
+            const res = await fetch('lessons/tomorrow.json');
+            if (res.ok) {
+              const data = await res.json();
+              if (data.title && Array.isArray(data.slidesData)) {
+                const tomorrowLesson = data as PlannedLesson;
+                const targetSeq = activeWs.sequences[0];
+                if (targetSeq) {
+                  const exists = targetSeq.lessons.some((l) => l.id === tomorrowLesson.id);
+                  const updatedLessons = exists
+                    ? targetSeq.lessons.map((l) => (l.id === tomorrowLesson.id ? tomorrowLesson : l))
+                    : [...targetSeq.lessons, tomorrowLesson];
+                  activeWs = {
+                    ...activeWs,
+                    sequences: activeWs.sequences.map((s) =>
+                      s.id === targetSeq.id ? { ...s, lessons: updatedLessons } : s
+                    ),
+                  };
+                  restoredSeqId = targetSeq.id;
+                  restoredLessonId = tomorrowLesson.id;
+                  restoredStage = (link.stage as StageId) || 4;
+                  if (link.slideIndex !== undefined) setUrlSlideIdx(link.slideIndex);
+                  if (link.present) {
+                    setPresentingState({
+                      lessonId: tomorrowLesson.id,
+                      slideIdx: link.slideIndex || 0,
+                    });
+                  }
+                }
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
       }
 
       setWorkspace(activeWs);
@@ -270,7 +349,43 @@ export function App() {
           setActiveLessonId(found.id);
           if (link.stage) setActiveStage(link.stage as StageId);
           if (link.slideIndex !== undefined) setUrlSlideIdx(link.slideIndex);
-          break;
+          return;
+        }
+      }
+
+      // If not found in current workspace, check DEMO_WORKSPACE
+      for (const demoSeq of DEMO_WORKSPACE.sequences) {
+        const foundDemo = demoSeq.lessons.find(
+          (l) =>
+            (link.lessonId && l.id === link.lessonId) ||
+            (link.lessonNumber !== undefined && l.lessonNumber === link.lessonNumber) ||
+            (link.lessonId &&
+              l.title
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .includes(link.lessonId.toLowerCase()))
+        );
+        if (foundDemo) {
+          const targetSeq =
+            workspace.sequences.find((s) => s.id === demoSeq.id) ||
+            workspace.sequences[0];
+          if (targetSeq) {
+            const exists = targetSeq.lessons.some((l) => l.id === foundDemo.id);
+            const updatedLessons = exists
+              ? targetSeq.lessons.map((l) => (l.id === foundDemo.id ? foundDemo : l))
+              : [...targetSeq.lessons, foundDemo];
+            setWorkspace({
+              ...workspace,
+              sequences: workspace.sequences.map((s) =>
+                s.id === targetSeq.id ? { ...s, lessons: updatedLessons } : s
+              ),
+            });
+            setActiveSequenceId(targetSeq.id);
+            setActiveLessonId(foundDemo.id);
+            setActiveStage((link.stage as StageId) || 4);
+            if (link.slideIndex !== undefined) setUrlSlideIdx(link.slideIndex);
+            return;
+          }
         }
       }
     };

@@ -18,6 +18,7 @@ import {
   PanelLeftClose,
   PanelRightClose,
   Play,
+  Share2,
   Check,
   Clock,
   Plus,
@@ -94,11 +95,18 @@ import {
   buildStage4InsertSlidesPrompt,
   buildStage4SlidesPrompt,
 } from '../../services/pedagogyPrompts';
+import { ShareLessonModal } from '../export/ShareLessonModal';
+import { syncUrlHash } from '../../utils/urlRouter';
+import {
+  captureSlideElementToBlob,
+  packageSlidesToZip,
+} from '../../services/imageExportService';
 
 interface Stage4SlideStudioProps {
   sequence: LessonSequence;
   activeLessonId: string | null;
   settings: AppSettings;
+  initialSlideIndex?: number;
   onSelectLesson: (lessonId: string) => void;
   onUpdateSequence: (updated: LessonSequence) => void;
   onLaunchPresenter: (lessonId: string, startSlideIndex: number) => void;
@@ -109,6 +117,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
   sequence,
   activeLessonId,
   settings,
+  initialSlideIndex,
   onSelectLesson,
   onUpdateSequence,
   onLaunchPresenter,
@@ -117,7 +126,9 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
   const lesson =
     sequence.lessons.find((l) => l.id === activeLessonId) || sequence.lessons[0];
 
-  const [selectedSlideIdx, setSelectedSlideIdx] = useState(0);
+  const [selectedSlideIdx, setSelectedSlideIdx] = useState(
+    initialSlideIndex !== undefined && initialSlideIndex >= 0 ? initialSlideIndex : 0
+  );
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [selectedElementIds, setSelectedElementIds] = useState<string[]>([]);
   const [mediaTargetElementId, setMediaTargetElementId] = useState<string | null>(null);
@@ -125,6 +136,13 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
   const [previewAllAnswers, setPreviewAllAnswers] = useState(true);
   const [mediaOpen, setMediaOpen] = useState(false);
   const [showWavePathEditor, setShowWavePathEditor] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isExportingAllImages, setIsExportingAllImages] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{
+    current: number;
+    total: number;
+    title: string;
+  } | null>(null);
   const [pickerModalMode, setPickerModalMode] =
     useState<SlidePickerModalMode | null>(null);
   const [promptModalTarget, setPromptModalTarget] = useState<
@@ -275,6 +293,22 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
   const slide = lesson.slidesData[safeIdx];
   const palette = PHASE_PALETTES[slide.phase];
 
+  useEffect(() => {
+    if (
+      initialSlideIndex !== undefined &&
+      initialSlideIndex >= 0 &&
+      initialSlideIndex < lesson.slidesData.length
+    ) {
+      setSelectedSlideIdx(initialSlideIndex);
+    }
+  }, [initialSlideIndex, lesson.slidesData.length]);
+
+  useEffect(() => {
+    if (lesson?.id) {
+      syncUrlHash(lesson.id, 4, safeIdx);
+    }
+  }, [lesson?.id, safeIdx]);
+
   const [historyPast, setHistoryPast] = useState<SlideData[][]>([]);
   const [historyFuture, setHistoryFuture] = useState<SlideData[][]>([]);
   const [hoveredImageTarget, setHoveredImageTarget] = useState<string | null>(null);
@@ -284,6 +318,52 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
   const showPasteToast = (msg: string) => {
     setPasteToast(msg);
     window.setTimeout(() => setPasteToast(null), 2800);
+  };
+
+  const handleExportAllSlidesAsImages = async () => {
+    if (!lesson.slidesData || lesson.slidesData.length === 0) return;
+    setIsExportingAllImages(true);
+    const initialIdx = safeIdx;
+    const collected: { filename: string; blob: Blob }[] = [];
+
+    try {
+      for (let i = 0; i < lesson.slidesData.length; i++) {
+        const curSlide = lesson.slidesData[i];
+        setSelectedSlideIdx(i);
+        setExportProgress({
+          current: i + 1,
+          total: lesson.slidesData.length,
+          title: curSlide.title || `Slide ${i + 1}`,
+        });
+
+        // Wait for React to mount and render the slide in the viewport
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
+        const viewport = document.getElementById('active-slide-canvas-viewport');
+        if (viewport) {
+          const blob = await captureSlideElementToBlob(viewport);
+          const num = String(i + 1).padStart(2, '0');
+          const safeTitle = (curSlide.title || 'Slide')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .slice(0, 30);
+          collected.push({
+            filename: `Slide-${num}-${safeTitle}.png`,
+            blob,
+          });
+        }
+      }
+
+      await packageSlidesToZip(collected, lesson);
+      showPasteToast(`Exported ${collected.length} slides as PNG images in ZIP!`);
+    } catch (err) {
+      console.error('Failed to export all slides to images ZIP', err);
+      setError(err instanceof Error ? err.message : 'Exporting slide images failed.');
+    } finally {
+      setSelectedSlideIdx(initialIdx);
+      setIsExportingAllImages(false);
+      setExportProgress(null);
+    }
   };
 
   const recordManualHistory = () => {
@@ -935,6 +1015,29 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
             className="px-4 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 flex items-center gap-1.5 shadow-xs"
           >
             <Play size={14} /> Present Live
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsShareModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-white border border-zinc-200 text-zinc-700 text-xs font-bold hover:bg-zinc-100 flex items-center gap-1.5 shadow-2xs transition"
+            title="Get direct link to this lesson or slide"
+          >
+            <Share2 size={14} className="text-emerald-700" />
+            <span>Share Link</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleExportAllSlidesAsImages()}
+            disabled={isExportingAllImages}
+            className="px-3.5 py-1.5 rounded-xl bg-white border border-emerald-300 text-emerald-800 text-xs font-bold hover:bg-emerald-50 flex items-center gap-1.5 shadow-2xs transition disabled:opacity-50"
+            title="Download all slides as crisp 1080p PNG images in a ZIP archive"
+          >
+            {isExportingAllImages ? (
+              <Loader2 size={14} className="animate-spin text-emerald-600" />
+            ) : (
+              <ImageIcon size={14} className="text-emerald-600" />
+            )}
+            <span>Export Images</span>
           </button>
           <button
             onClick={() => onOpenExportModal(lesson.id)}
@@ -3331,6 +3434,45 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
         <div className="fixed bottom-6 right-6 z-50 bg-zinc-900 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-zinc-700 text-xs font-bold flex items-center gap-2 animate-reveal-pop">
           <ClipboardPaste size={15} className="text-emerald-400" />
           <span>{pasteToast}</span>
+        </div>
+      )}
+
+      {/* Share / Direct Link Modal */}
+      <ShareLessonModal
+        isOpen={isShareModalOpen}
+        lesson={lesson}
+        currentSlideIndex={safeIdx}
+        onClose={() => setIsShareModalOpen(false)}
+      />
+
+      {/* Progress Overlay when Exporting All Slides as High-Res Images */}
+      {isExportingAllImages && exportProgress && (
+        <div className="fixed inset-0 z-50 bg-zinc-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 shadow-2xl border border-zinc-200 max-w-sm w-full text-center space-y-4 animate-reveal-pop">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto shadow-xs">
+              <Loader2 size={28} className="animate-spin" />
+            </div>
+            <div>
+              <h4 className="text-base font-bold text-zinc-900">
+                Exporting Slides as High-Res Images...
+              </h4>
+              <p className="text-xs text-zinc-600 mt-1">
+                Slide {exportProgress.current} of {exportProgress.total}:{' '}
+                <span className="font-semibold text-emerald-700">{exportProgress.title}</span>
+              </p>
+            </div>
+            <div className="w-full bg-zinc-100 h-2 rounded-full overflow-hidden">
+              <div
+                className="bg-emerald-600 h-full transition-all duration-300"
+                style={{
+                  width: `${Math.round((exportProgress.current / exportProgress.total) * 100)}%`,
+                }}
+              />
+            </div>
+            <p className="text-[11px] text-zinc-400">
+              Capturing 1080p paper-cut waves, typography and diagrams...
+            </p>
+          </div>
         </div>
       )}
     </div>

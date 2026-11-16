@@ -15,6 +15,7 @@ import {
   CurriculumFolder,
   CurriculumWorkspace,
   LessonSequence,
+  PlannedLesson,
   StageId,
 } from './types/curriculum';
 import { DEMO_WORKSPACE } from './data/demoCurriculum';
@@ -37,7 +38,9 @@ import { Stage3BlueprintView } from './components/stages/Stage3BlueprintView';
 import { Stage4SlideStudio } from './components/stages/Stage4SlideStudio';
 import { ClassroomPresenter } from './components/presenter/ClassroomPresenter';
 import { ExportModal } from './components/export/ExportModal';
+import { ShareLessonModal } from './components/export/ShareLessonModal';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { parseLessonLink, syncUrlHash } from './utils/urlRouter';
 
 export function App() {
   const [workspace, setWorkspace] = useState<CurriculumWorkspace>(DEMO_WORKSPACE);
@@ -58,6 +61,8 @@ export function App() {
     slideIdx: number;
   } | null>(null);
   const [exportLessonId, setExportLessonId] = useState<string | null>(null);
+  const [shareModalLesson, setShareModalLesson] = useState<PlannedLesson | null>(null);
+  const [urlSlideIdx, setUrlSlideIdx] = useState<number | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmResetModalOpen, setConfirmResetModalOpen] = useState(false);
 
@@ -72,37 +77,91 @@ export function App() {
 
   useEffect(() => {
     void loadWorkspace().then((loaded) => {
-      setWorkspace(loaded);
+      let activeWs = loaded;
       let restoredSeqId: string | null = null;
       let restoredLessonId: string | null = null;
       let restoredStage: StageId | null = null;
 
-      try {
-        const rawNav = localStorage.getItem('starting-point-active-nav-v1');
-        if (rawNav) {
-          const parsed = JSON.parse(rawNav) as {
-            activeSequenceId?: string | null;
-            activeLessonId?: string | null;
-            activeStage?: StageId;
+      // 1. Check for incoming URL deep-link or portable payload first (#lesson=... or #data=...)
+      const link = parseLessonLink();
+
+      if (link.portableLesson) {
+        // Import or merge portable lesson into the primary sequence
+        const existingSeq = activeWs.sequences[0];
+        if (existingSeq) {
+          const exists = existingSeq.lessons.some((l) => l.id === link.portableLesson!.id);
+          const updatedLessons = exists
+            ? existingSeq.lessons.map((l) => (l.id === link.portableLesson!.id ? link.portableLesson! : l))
+            : [link.portableLesson, ...existingSeq.lessons];
+          activeWs = {
+            ...activeWs,
+            sequences: activeWs.sequences.map((s) =>
+              s.id === existingSeq.id ? { ...s, lessons: updatedLessons } : s
+            ),
           };
-          restoredSeqId = parsed.activeSequenceId ?? null;
-          restoredLessonId = parsed.activeLessonId ?? null;
-          if (
-            parsed.activeStage === 1 ||
-            parsed.activeStage === 2 ||
-            parsed.activeStage === 3 ||
-            parsed.activeStage === 4
-          ) {
-            restoredStage = parsed.activeStage;
+          restoredSeqId = existingSeq.id;
+          restoredLessonId = link.portableLesson.id;
+          restoredStage = 4;
+          if (link.slideIndex !== undefined) setUrlSlideIdx(link.slideIndex);
+          showToast(`Opened shared lesson: "${link.portableLesson.title}"`);
+        }
+      } else if (link.lessonId || link.lessonNumber !== undefined) {
+        // Find matching sequence and lesson
+        for (const seq of activeWs.sequences) {
+          const found = seq.lessons.find(
+            (l) =>
+              (link.lessonId && l.id === link.lessonId) ||
+              (link.lessonNumber !== undefined && l.lessonNumber === link.lessonNumber) ||
+              (link.lessonId &&
+                l.title
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, '-')
+                  .includes(link.lessonId.toLowerCase()))
+          );
+          if (found) {
+            restoredSeqId = seq.id;
+            restoredLessonId = found.id;
+            restoredStage = (link.stage as StageId) || 4;
+            if (link.slideIndex !== undefined) setUrlSlideIdx(link.slideIndex);
+            if (link.present) {
+              setPresentingState({ lessonId: found.id, slideIdx: link.slideIndex || 0 });
+            }
+            break;
           }
         }
-      } catch {
-        // ignore storage errors
+      }
+
+      setWorkspace(activeWs);
+
+      // 2. Fall back to localStorage navigation if not deep-linked via URL
+      if (!restoredLessonId) {
+        try {
+          const rawNav = localStorage.getItem('starting-point-active-nav-v1');
+          if (rawNav) {
+            const parsed = JSON.parse(rawNav) as {
+              activeSequenceId?: string | null;
+              activeLessonId?: string | null;
+              activeStage?: StageId;
+            };
+            restoredSeqId = parsed.activeSequenceId ?? null;
+            restoredLessonId = parsed.activeLessonId ?? null;
+            if (
+              parsed.activeStage === 1 ||
+              parsed.activeStage === 2 ||
+              parsed.activeStage === 3 ||
+              parsed.activeStage === 4
+            ) {
+              restoredStage = parsed.activeStage;
+            }
+          }
+        } catch {
+          // ignore storage errors
+        }
       }
 
       const targetSeq =
-        loaded.sequences.find((s) => s.id === restoredSeqId) ||
-        loaded.sequences[0];
+        activeWs.sequences.find((s) => s.id === restoredSeqId) ||
+        activeWs.sequences[0];
       if (targetSeq) {
         setActiveSequenceId(targetSeq.id);
         const targetLesson =
@@ -116,6 +175,39 @@ export function App() {
       setHydrated(true);
     });
   }, []);
+
+  // Listen to browser hash changes (e.g. user pastes new #lesson=... link or hits back/forward)
+  useEffect(() => {
+    if (!hydrated) return;
+    const handleHashChange = () => {
+      const link = parseLessonLink();
+      if (!link.lessonId && link.lessonNumber === undefined && !link.portableLesson) return;
+
+      for (const seq of workspace.sequences) {
+        const found = seq.lessons.find(
+          (l) =>
+            (link.lessonId && l.id === link.lessonId) ||
+            (link.lessonNumber !== undefined && l.lessonNumber === link.lessonNumber)
+        );
+        if (found) {
+          setActiveSequenceId(seq.id);
+          setActiveLessonId(found.id);
+          if (link.stage) setActiveStage(link.stage as StageId);
+          if (link.slideIndex !== undefined) setUrlSlideIdx(link.slideIndex);
+          break;
+        }
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [workspace, hydrated]);
+
+  // Keep browser address bar in sync with current lesson & stage so copying the URL works anytime
+  useEffect(() => {
+    if (!hydrated) return;
+    syncUrlHash(activeLessonId, activeStage, urlSlideIdx);
+  }, [activeLessonId, activeStage, urlSlideIdx, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -557,6 +649,7 @@ export function App() {
               sequence={activeSequence}
               activeLessonId={activeLessonId}
               settings={settings}
+              initialSlideIndex={urlSlideIdx}
               onSelectLesson={setActiveLessonId}
               onUpdateSequence={updateSequence}
               onLaunchPresenter={(lessonId, slideIdx) =>
@@ -577,15 +670,25 @@ export function App() {
         />
       )}
 
-      {/* Export Modal (.pptx & Google Slides) */}
+      {/* Export Modal (.pptx, Images & Google Slides) */}
       <ExportModal
         isOpen={Boolean(exportLesson)}
         lesson={exportLesson || null}
         settings={settings}
+        currentSlideIndex={urlSlideIdx ?? 0}
         onUpdateGoogleClientId={(cid) =>
           handleUpdateSettings({ ...settings, googleClientId: cid })
         }
+        onOpenShareModal={() => setShareModalLesson(exportLesson || null)}
         onClose={() => setExportLessonId(null)}
+      />
+
+      {/* Share Lesson Direct Link Modal */}
+      <ShareLessonModal
+        isOpen={Boolean(shareModalLesson)}
+        lesson={shareModalLesson}
+        currentSlideIndex={urlSlideIdx ?? 0}
+        onClose={() => setShareModalLesson(null)}
       />
 
       {/* Settings Modal */}

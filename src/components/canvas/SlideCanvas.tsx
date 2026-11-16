@@ -4135,6 +4135,8 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       {/* Scaled 1920x1080 Fixed Coordinate Slide Canvas */}
       <div
         ref={canvasBoxRef}
+        id={isThumbnail ? undefined : 'active-slide-canvas-viewport'}
+        data-slide-viewport={isThumbnail ? undefined : 'true'}
         onPointerDown={(e) => {
           if (!canEditComponents) return;
           if (e.button !== 0) return;

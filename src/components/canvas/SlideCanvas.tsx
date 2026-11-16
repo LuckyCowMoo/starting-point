@@ -1928,29 +1928,49 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       : hideWaveBackground
       ? 'rounded-2xl p-5 border-2 border-dashed border-slate-300 bg-white/65'
       : isHighlight
-      ? 'border-l-[8px] pl-6 py-1.5 transition-all'
+      ? `rounded-2xl p-6 transition-all border-2 ${
+          onDark
+            ? 'bg-white/10 border-white/30'
+            : 'bg-emerald-500/10 border-emerald-500/30'
+        }`
       : 'px-2 py-1.5 transition-all';
 
     const cardContent = (
       <div
         className={`${containerClasses} space-y-2.5`}
         style={{
-          borderColor: isBoxed
+          borderColor: isHighlight
+            ? onDark
+              ? 'rgba(255,255,255,0.3)'
+              : neutralAccent
+            : isBoxed
             ? onDark
               ? 'rgba(255,255,255,0.28)'
               : neutralBorder
             : undefined,
-          borderTopColor: isBoxed
+          borderTopColor: isHighlight
+            ? onDark
+              ? 'rgba(255,255,255,0.3)'
+              : neutralAccent
+            : isBoxed
             ? onDark
               ? 'rgba(255,255,255,0.28)'
               : neutralBorder
             : undefined,
-          borderRightColor: isBoxed
+          borderRightColor: isHighlight
+            ? onDark
+              ? 'rgba(255,255,255,0.3)'
+              : neutralAccent
+            : isBoxed
             ? onDark
               ? 'rgba(255,255,255,0.28)'
               : neutralBorder
             : undefined,
-          borderBottomColor: isBoxed
+          borderBottomColor: isHighlight
+            ? onDark
+              ? 'rgba(255,255,255,0.3)'
+              : neutralAccent
+            : isBoxed
             ? onDark
               ? 'rgba(255,255,255,0.28)'
               : neutralBorder
@@ -2344,8 +2364,8 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                             : 'bg-white/95'
                         }`
                       : hideWaveBackground
-                      ? 'p-6 rounded-2xl border-2 border-dashed border-slate-300 border-l-[10px] bg-white/65'
-                      : 'border-l-[9px] pl-6 py-1'
+                      ? 'p-6 rounded-2xl border-2 border-dashed border-slate-300 bg-white/65'
+                      : 'p-6 rounded-2xl border-2 border-emerald-500/25 bg-emerald-500/5'
                   }
                   style={
                     bigQBoxed
@@ -2356,7 +2376,13 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                           borderBottomColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
                           borderLeftColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
                         }
-                      : { borderLeftColor: bigQOnDark ? '#FFFFFF' : neutralAccent }
+                      : {
+                          borderColor: bigQOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                          borderTopColor: bigQOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                          borderRightColor: bigQOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                          borderBottomColor: bigQOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                          borderLeftColor: bigQOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                        }
                   }
                 >
                   <div
@@ -3033,8 +3059,8 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                             : 'bg-white/92'
                         }`
                       : hideWaveBackground
-                      ? 'p-6 rounded-2xl border-2 border-dashed border-slate-300 border-l-[10px] bg-white/65'
-                      : 'border-l-[10px] pl-7 py-1'
+                      ? 'p-6 rounded-2xl border-2 border-dashed border-slate-300 bg-white/65'
+                      : 'p-6 rounded-2xl border-2 border-emerald-500/25 bg-emerald-500/5'
                   }
                   style={
                     bigQBoxed
@@ -3045,7 +3071,13 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                           borderBottomColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
                           borderLeftColor: bigQOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
                         }
-                      : { borderLeftColor: bigQOnDark ? '#FFFFFF' : neutralAccent }
+                      : {
+                          borderColor: bigQOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                          borderTopColor: bigQOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                          borderRightColor: bigQOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                          borderBottomColor: bigQOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                          borderLeftColor: bigQOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                        }
                   }
                 >
                   <p
@@ -3194,7 +3226,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 onMouseLeave={() => {
                   if (editable && !isThumbnail) onHoverImageTarget?.(null);
                 }}
-                className="w-full h-[520px] rounded-3xl border-2 border-zinc-900 bg-white shadow-md overflow-hidden flex items-center justify-center p-6 relative cursor-pointer group hover:border-emerald-600 transition"
+                className="w-full h-[520px] rounded-3xl border-2 border-zinc-200 bg-white shadow-md overflow-hidden flex items-center justify-center p-6 relative cursor-pointer group hover:border-emerald-600 transition"
                 onClick={() => {
                   if (editable && !isThumbnail && onOpenMediaPicker) {
                     onOpenMediaPicker('vocab-media-0');
@@ -3250,7 +3282,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                         }`
                       : hideWaveBackground
                       ? 'rounded-2xl p-8 border-2 border-dashed border-slate-300 bg-white/65 space-y-5'
-                      : 'border-l-[10px] pl-8 py-3 space-y-5'
+                      : 'rounded-3xl p-8 border-2 border-emerald-500/25 bg-white/80 space-y-5'
                   }
                   style={
                     focusBoxed
@@ -3261,9 +3293,13 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                           borderBottomColor: focusOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
                           borderLeftColor: focusOnDark ? 'rgba(255,255,255,0.28)' : neutralBorder,
                         }
-                      : !hideWaveBackground
-                      ? { borderLeftColor: focusOnDark ? '#FFFFFF' : neutralAccent }
-                      : undefined
+                      : {
+                          borderColor: focusOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                          borderTopColor: focusOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                          borderRightColor: focusOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                          borderBottomColor: focusOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                          borderLeftColor: focusOnDark ? 'rgba(255,255,255,0.3)' : neutralBorder,
+                        }
                   }
                 >
                   <h2
@@ -3353,7 +3389,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                     onMouseLeave={() => {
                       if (editable && !isThumbnail) onHoverImageTarget?.(null);
                     }}
-                    className="w-full h-[280px] rounded-2xl border-2 border-zinc-900 bg-white shadow-sm overflow-hidden flex items-center justify-center p-3 relative cursor-pointer group hover:border-emerald-600 transition"
+                    className="w-full h-[280px] rounded-2xl border-2 border-zinc-200 bg-white shadow-sm overflow-hidden flex items-center justify-center p-3 relative cursor-pointer group hover:border-emerald-600 transition"
                     onClick={() => {
                       if (editable && !isThumbnail && onOpenMediaPicker) {
                         onOpenMediaPicker(`vocab-media-${i}`);

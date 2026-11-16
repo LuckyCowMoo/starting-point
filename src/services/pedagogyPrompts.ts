@@ -534,6 +534,7 @@ SUMMARY OF CLASSROOM-READY SLIDE RULES:
 - STEPS ON THE SAME SIDE OF THE WAVE: On a slide with sequential steps (Step 1, Step 2, etc.), ALL steps MUST be on the SAME layer and SAME side of the colour wave (always "layer": "top"). Never split sequential steps across the wave!
 - KEY VOCABULARY DUAL-CODING LAYOUTS: For 1 term use "vocab-single-term-focus" (visual on the left, term + definition on the right). For 2–4 terms use "vocabulary-spotlight" (side-by-side columns with a framed visual slot on top and bold term + definition underneath).
 - TABLES & COMPARISONS: When presenting structured tabular information (binary/denary place value grids, truth tables, calculation steps, comparisons), use "tableData" with { "rows": X, "cols": Y, "headers": [...], "cells": [[...]] } or "customCanvasElements" with "kind": "table". Fill each cell with clean, concise content—NEVER smash grids into a single messy inline text string.
+- UNIFIED SLIDE TEXT AREA (90% of slides): For all standard slides, output "richLines" where each line of text has a clear style ("title", "heading-1", "heading-2", "heading-3", "normal", "callout", "code"). Also provide "unifiedText" (all lines joined by \\n) and "bodyBlocks" for full backward compatibility.
 - Choose an appropriate "waveVariant" from: ${waveKeys}.
 
 Return ONLY valid JSON wrapped inside a single \`\`\`json \`\`\` code block with key "slides" (never output bare raw JSON outside code blocks).
@@ -550,6 +551,14 @@ CRITICAL FOR SVG / HTML: Inside any "svgCode", inline SVG, or HTML attribute str
       "title": "Max 5 words",
       "lessonDate": "Optional readable classroom date for lesson-title-page",
       "bigQuestion": "...",
+      "richLines": [
+        { "text": "Topic Title", "style": "title" },
+        { "text": "Subheading or Key Concept", "style": "heading-2" },
+        { "text": "• First crisp second-person explanation point", "style": "normal" },
+        { "text": "• Second key teaching point with everyday analogy", "style": "normal" },
+        { "text": "Key point: One punchy sentence locking in the core takeaway.", "style": "callout" }
+      ],
+      "unifiedText": "Topic Title\\n## Subheading or Key Concept\\n• First crisp second-person explanation point\\n• Second key teaching point with everyday analogy\\nKey point: One punchy sentence locking in the core takeaway.",
       "bodyBlocks": [
         { "id": "b1", "heading": "", "dualCodeIcon": "concept", "content": "• Second-person pupil point 1\\n• Concise point 2", "style": "plain", "layer": "top", "column": "left" },
         { "id": "b2", "heading": "Key point", "dualCodeIcon": "tip", "content": "One punchy sentence locking in the core takeaway.", "style": "highlight", "layer": "top", "column": "left" }

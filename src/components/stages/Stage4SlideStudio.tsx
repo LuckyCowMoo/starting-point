@@ -35,6 +35,9 @@ import {
   Undo,
   Redo,
   Wand2,
+  Bold,
+  Italic,
+  Underline,
 } from 'lucide-react';
 import {
   AppSettings,
@@ -44,12 +47,22 @@ import {
   PlannedLesson,
   RoutineIconType,
   SlideData,
+  SlideLineStyle,
   SlidePresetId,
+  SlideRichLine,
   SlideTableData,
   SlideTextBlock,
   StarterQuadrantLayout,
   WaveVariant,
 } from '../../types/curriculum';
+import {
+  CONSTANT_TEXT_COLORS,
+  FONT_SIZE_PRESETS,
+  convertRichLinesToBodyBlocks,
+  getSlideRichLines,
+  parseTextToRichLines,
+  richLinesToUnifiedText,
+} from '../../utils/richTextHelper';
 import {
   PHASE_PALETTES,
   ROUTINE_ICON_META,
@@ -2368,125 +2381,246 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                     })}
                   </div>
                 ) : (
-                  <div className="space-y-2.5 border-t border-zinc-200 pt-3">
+                  <div className="space-y-3.5 border-t border-zinc-200 pt-3">
                     <div className="flex items-center justify-between">
-                      <label className="font-bold text-zinc-500 uppercase tracking-wider text-[10px]">
-                        Content Blocks
+                      <label className="font-extrabold text-zinc-700 text-xs flex items-center gap-1.5">
+                        <Type size={14} className="text-emerald-700" />
+                        <span>Unified Slide Text & Formatting</span>
                       </label>
-                      <button
-                        onClick={() =>
-                          updateActiveSlide({
-                            bodyBlocks: [
-                              ...slide.bodyBlocks,
-                              {
-                                id: `blk-${Date.now()}`,
-                                heading: '',
-                                content: '• Crisp pupil-facing point...',
-                                style: 'plain',
-                                layer: 'top',
-                              },
-                            ],
-                          })
-                        }
-                        className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-0.5"
-                      >
-                        <Plus size={12} /> Add Block
-                      </button>
+                      <span className="text-[10px] text-zinc-500 font-medium">
+                        1 line = 1 style item
+                      </span>
                     </div>
-                    {slide.bodyBlocks.map((b, idx) => (
-                      <div
-                        key={b.id}
-                        className="p-2.5 rounded-xl bg-[#FAF6F0] border border-zinc-200 space-y-1.5"
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            value={b.heading || ''}
-                            onChange={(e) =>
-                              updateActiveSlide({
-                                bodyBlocks: slide.bodyBlocks.map((item, i) =>
-                                  i === idx
-                                    ? { ...item, heading: e.target.value }
-                                    : item
-                                ),
-                              })
-                            }
-                            placeholder="Optional heading (blank = clean)"
-                            className="flex-1 font-bold bg-white px-2 py-1 rounded-lg border border-zinc-200"
-                          />
-                          <select
-                            value={b.style === 'card' ? 'plain' : b.style || 'plain'}
-                            onChange={(e) =>
-                              updateActiveSlide({
-                                bodyBlocks: slide.bodyBlocks.map((item, i) =>
-                                  i === idx
-                                    ? {
-                                        ...item,
-                                        style: e.target.value as NonNullable<SlideTextBlock['style']>,
-                                      }
-                                    : item
-                                ),
-                              })
-                            }
-                            title="Block display style"
-                            className="px-1.5 py-1 rounded-lg text-[10px] font-bold border border-zinc-300 bg-white text-zinc-700"
-                          >
-                            <option value="plain">Plain Text</option>
-                            <option value="boxed">Boxed Card</option>
-                            <option value="highlight">Accent Left Bar</option>
-                            <option value="step">Numbered Step</option>
-                            <option value="code">Code Block</option>
-                          </select>
-                          <button
-                            onClick={() =>
-                              updateActiveSlide({
-                                bodyBlocks: slide.bodyBlocks.map((item, i) =>
-                                  i === idx
-                                    ? {
-                                        ...item,
-                                        layer: item.layer === 'bottom' ? 'top' : 'bottom',
-                                      }
-                                    : item
-                                ),
-                              })
-                            }
-                            title="Switch between Top Layer (Creamy White) and Bottom Layer (White Text)"
-                            className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition shrink-0 ${
-                              b.layer === 'bottom'
-                                ? 'bg-zinc-900 text-white border-zinc-900'
-                                : 'bg-white text-zinc-700 border-zinc-300 hover:bg-zinc-100'
-                            }`}
-                          >
-                            {b.layer === 'bottom' ? 'Bottom Layer' : 'Top Layer'}
-                          </button>
-                          <button
-                            onClick={() =>
-                              updateActiveSlide({
-                                bodyBlocks: slide.bodyBlocks.filter(
-                                  (_, i) => i !== idx
-                                ),
-                              })
-                            }
-                            className="p-1 text-zinc-400 hover:text-rose-600"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                        <textarea
-                          value={b.content}
-                          rows={3}
-                          onChange={(e) =>
-                            updateActiveSlide({
-                              bodyBlocks: slide.bodyBlocks.map((item, i) =>
-                                i === idx
-                                  ? { ...item, content: e.target.value }
-                                  : item
-                              ),
-                            })
-                          }
-                          className="w-full p-2 rounded-lg border border-zinc-200 bg-white resize-none"
-                        />
+
+                    {/* Unified Text Area */}
+                    <textarea
+                      value={slide.unifiedText ?? richLinesToUnifiedText(getSlideRichLines(slide))}
+                      rows={6}
+                      onChange={(e) => {
+                        const newText = e.target.value;
+                        const currentRichLines = getSlideRichLines(slide);
+                        const newRichLines = parseTextToRichLines(newText, currentRichLines);
+                        const titleLine = newRichLines.find((l) => l.style === 'title') || newRichLines[0];
+                        const firstTitle = titleLine?.text || '';
+                        const newBodyBlocks = convertRichLinesToBodyBlocks(newRichLines);
+                        updateActiveSlide({
+                          unifiedText: newText,
+                          richLines: newRichLines,
+                          title: firstTitle || slide.title,
+                          bodyBlocks: newBodyBlocks,
+                        });
+                      }}
+                      placeholder="Type all slide text in one area...&#10;Line 1: Topic Title&#10;Line 2: Subheading or Section&#10;• Bullet point explanation&#10;Key Point: One punchy sentence"
+                      className="w-full p-2.5 rounded-xl border border-zinc-300 bg-white text-zinc-900 font-medium text-xs leading-relaxed resize-y shadow-2xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                    />
+
+                    {/* Per-Line Styling Controls List Directly Beneath */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                          Per-Line Style, Size & Color Inspector
+                        </span>
+                        <span className="text-[10px] text-zinc-400">
+                          {getSlideRichLines(slide).length} {getSlideRichLines(slide).length === 1 ? 'line' : 'lines'}
+                        </span>
                       </div>
-                    ))}
+
+                      <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                        {getSlideRichLines(slide).map((line, idx) => {
+                          const currentRichLines = getSlideRichLines(slide);
+                          const snippet = line.text.trim()
+                            ? line.text.trim().split(/\s+/).slice(0, 5).join(' ') +
+                              (line.text.trim().split(/\s+/).length > 5 ? '…' : '')
+                            : '(Empty line)';
+
+                          return (
+                            <div
+                              key={idx}
+                              className="p-2.5 rounded-xl bg-[#FAF6F0] border border-zinc-200 hover:border-zinc-300 shadow-2xs space-y-2 transition-all"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                  <span className="px-1.5 py-0.5 rounded-md bg-white border border-zinc-200 text-zinc-700 font-mono font-bold text-[10px] shrink-0">
+                                    L{idx + 1}
+                                  </span>
+                                  <span
+                                    title={line.text}
+                                    className="text-[11px] font-bold text-zinc-800 truncate"
+                                  >
+                                    {line.text.trim() ? `"${snippet}"` : <span className="text-zinc-400 italic">(Blank line)</span>}
+                                  </span>
+                                </div>
+
+                                {/* Style Selector Dropdown */}
+                                <select
+                                  value={line.style || (idx === 0 ? 'title' : 'normal')}
+                                  onChange={(e) => {
+                                    const nextStyle = e.target.value as SlideLineStyle;
+                                    const nextLines = [...currentRichLines];
+                                    nextLines[idx] = { ...line, style: nextStyle };
+                                    const nextTitle =
+                                      nextLines.find((l) => l.style === 'title')?.text ||
+                                      (nextStyle === 'title' ? line.text : slide.title);
+                                    updateActiveSlide({
+                                      richLines: nextLines,
+                                      unifiedText: richLinesToUnifiedText(nextLines),
+                                      title: nextTitle,
+                                      bodyBlocks: convertRichLinesToBodyBlocks(nextLines),
+                                    });
+                                  }}
+                                  className="text-[10.5px] font-bold px-2 py-1 rounded-lg border border-zinc-300 bg-white text-zinc-800 outline-none shrink-0"
+                                >
+                                  <option value="title">Title</option>
+                                  <option value="heading-1">Heading 1</option>
+                                  <option value="heading-2">Heading 2</option>
+                                  <option value="heading-3">Heading 3</option>
+                                  <option value="normal">Normal Text</option>
+                                  <option value="callout">Callout Box</option>
+                                  <option value="code">Code Block</option>
+                                </select>
+                              </div>
+
+                              {/* Format controls row: Size, B, I, U, and Colors */}
+                              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-zinc-200/70">
+                                {/* Font Size Selector */}
+                                <select
+                                  value={line.fontSize || ''}
+                                  onChange={(e) => {
+                                    const nextSize = e.target.value ? Number(e.target.value) : undefined;
+                                    const nextLines = [...currentRichLines];
+                                    nextLines[idx] = { ...line, fontSize: nextSize };
+                                    updateActiveSlide({
+                                      richLines: nextLines,
+                                      bodyBlocks: convertRichLinesToBodyBlocks(nextLines),
+                                    });
+                                  }}
+                                  className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md border border-zinc-300 bg-white text-zinc-700 outline-none"
+                                >
+                                  <option value="">Auto Size</option>
+                                  <option value="18">18px (Fine)</option>
+                                  <option value="22">22px (Body)</option>
+                                  <option value="26">26px (Large)</option>
+                                  <option value="30">30px (Subheading)</option>
+                                  <option value="36">36px (Section H2)</option>
+                                  <option value="44">44px (Major H1)</option>
+                                  <option value="52">52px (Title)</option>
+                                  <option value="60">60px (Hero Display)</option>
+                                </select>
+
+                                {/* Bold / Italic / Underline Toggles */}
+                                <div className="flex items-center rounded-md border border-zinc-300 bg-white overflow-hidden shadow-2xs">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextLines = [...currentRichLines];
+                                      nextLines[idx] = { ...line, isBold: !line.isBold };
+                                      updateActiveSlide({
+                                        richLines: nextLines,
+                                        bodyBlocks: convertRichLinesToBodyBlocks(nextLines),
+                                      });
+                                    }}
+                                    className={`px-1.5 py-0.5 text-[11px] font-bold transition ${
+                                      line.isBold ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:bg-zinc-100'
+                                    }`}
+                                    title="Toggle Bold"
+                                  >
+                                    <Bold size={11} strokeWidth={3} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextLines = [...currentRichLines];
+                                      nextLines[idx] = { ...line, isItalic: !line.isItalic };
+                                      updateActiveSlide({
+                                        richLines: nextLines,
+                                        bodyBlocks: convertRichLinesToBodyBlocks(nextLines),
+                                      });
+                                    }}
+                                    className={`px-1.5 py-0.5 text-[11px] italic transition border-l border-zinc-200 ${
+                                      line.isItalic ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:bg-zinc-100'
+                                    }`}
+                                    title="Toggle Italic"
+                                  >
+                                    <Italic size={11} strokeWidth={2.5} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextLines = [...currentRichLines];
+                                      nextLines[idx] = { ...line, isUnderline: !line.isUnderline };
+                                      updateActiveSlide({
+                                        richLines: nextLines,
+                                        bodyBlocks: convertRichLinesToBodyBlocks(nextLines),
+                                      });
+                                    }}
+                                    className={`px-1.5 py-0.5 text-[11px] underline transition border-l border-zinc-200 ${
+                                      line.isUnderline ? 'bg-zinc-800 text-white' : 'text-zinc-600 hover:bg-zinc-100'
+                                    }`}
+                                    title="Toggle Underline"
+                                  >
+                                    <Underline size={11} strokeWidth={2.5} />
+                                  </button>
+                                </div>
+
+                                {/* Color Swatches */}
+                                <div className="flex items-center gap-1 ml-auto">
+                                  {/* Theme Accent Color Swatch */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextLines = [...currentRichLines];
+                                      nextLines[idx] = { ...line, color: palette.accent };
+                                      updateActiveSlide({ richLines: nextLines });
+                                    }}
+                                    style={{ backgroundColor: palette.accent }}
+                                    className={`w-4 h-4 rounded-full border border-black/15 transition ${
+                                      line.color === palette.accent ? 'ring-2 ring-offset-1 ring-zinc-800 scale-110' : 'hover:scale-105'
+                                    }`}
+                                    title={`Theme Accent (${palette.accent})`}
+                                  />
+
+                                  {/* Constant Colors */}
+                                  {CONSTANT_TEXT_COLORS.slice(0, 6).map((c) => (
+                                    <button
+                                      key={c.hex}
+                                      type="button"
+                                      onClick={() => {
+                                        const nextLines = [...currentRichLines];
+                                        nextLines[idx] = { ...line, color: c.hex };
+                                        updateActiveSlide({ richLines: nextLines });
+                                      }}
+                                      style={{ backgroundColor: c.hex }}
+                                      className={`w-4 h-4 rounded-full border border-black/15 transition ${
+                                        line.color === c.hex ? 'ring-2 ring-offset-1 ring-zinc-800 scale-110' : 'hover:scale-105'
+                                      }`}
+                                      title={`${c.label} (${c.hex})`}
+                                    />
+                                  ))}
+
+                                  {/* Auto/Reset Swatch */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextLines = [...currentRichLines];
+                                      nextLines[idx] = { ...line, color: undefined };
+                                      updateActiveSlide({ richLines: nextLines });
+                                    }}
+                                    className={`px-1 py-0.5 rounded text-[9px] font-bold border transition ${
+                                      !line.color
+                                        ? 'bg-zinc-300 text-zinc-900 border-zinc-400 font-extrabold'
+                                        : 'bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-100'
+                                    }`}
+                                    title="Reset to default automatic color"
+                                  >
+                                    Auto
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 )}
               </>

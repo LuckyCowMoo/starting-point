@@ -11,6 +11,11 @@ import {
 } from '../types/curriculum';
 import { PHASE_PALETTES, SLIDE_PRESETS } from '../data/palettes';
 import {
+  convertRichLinesToBodyBlocks,
+  getSlideRichLines,
+  richLinesToUnifiedText,
+} from '../utils/richTextHelper';
+import {
   buildBespokeSlidePrompt,
   buildStage1Prompt,
   buildStage2Prompt,
@@ -525,6 +530,32 @@ export function parseStage4SlidesResponse(
       color: layer.color || palette.layers[lIdx % palette.layers.length],
     }));
 
+    const derivedTitle =
+      s.title ||
+      s.richLines?.find((l) => l.style === 'title')?.text ||
+      s.richLines?.[0]?.text ||
+      bp?.title ||
+      `Slide ${idx + 1}`;
+
+    const effectiveBlocks =
+      cleanedBlocks.length > 0
+        ? cleanedBlocks
+        : s.richLines && s.richLines.length > 0
+        ? convertRichLinesToBodyBlocks(s.richLines)
+        : [];
+
+    const effectiveRichLines =
+      s.richLines && s.richLines.length > 0
+        ? s.richLines
+        : getSlideRichLines({
+            ...s,
+            title: derivedTitle,
+            bodyBlocks: effectiveBlocks,
+          } as SlideData);
+
+    const effectiveUnified =
+      s.unifiedText || richLinesToUnifiedText(effectiveRichLines);
+
     return {
       id: targetSlideId && idx === 0 ? targetSlideId : s.id || `slide-${Date.now()}-${idx + 1}`,
       blueprintId: bp?.id || s.blueprintId || `bp-${idx + 1}`,
@@ -533,10 +564,12 @@ export function parseStage4SlidesResponse(
       presetId,
       waveVariant,
       invertWaveLayers: s.invertWaveLayers,
-      title: s.title || bp?.title || `Slide ${idx + 1}`,
+      title: derivedTitle,
       lessonDate: s.lessonDate,
       bigQuestion: s.bigQuestion,
-      bodyBlocks: cleanedBlocks,
+      bodyBlocks: effectiveBlocks,
+      richLines: effectiveRichLines,
+      unifiedText: effectiveUnified,
       starterQuadrants: cleanedQuads,
       keyTermsStrip: s.keyTermsStrip,
       mediaItem: s.mediaItem,

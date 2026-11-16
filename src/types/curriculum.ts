@@ -241,6 +241,26 @@ export interface SideImageConfig {
   controlPoints?: { x: number; y: number }[];
 }
 
+export type SlideLineStyle =
+  | 'title'
+  | 'heading-1'
+  | 'heading-2'
+  | 'heading-3'
+  | 'normal'
+  | 'callout'
+  | 'code';
+
+export interface SlideRichLine {
+  id?: string;
+  text: string;
+  style?: SlideLineStyle;
+  fontSize?: number;
+  color?: string;
+  isBold?: boolean;
+  isItalic?: boolean;
+  isUnderline?: boolean;
+}
+
 export interface SlideData {
   id: string;
   blueprintId: string;
@@ -255,6 +275,8 @@ export interface SlideData {
   bigQuestion?: string;
   bodyBlocks: SlideTextBlock[];
   starterQuadrants?: StarterQuadrant[];
+  richLines?: SlideRichLine[];
+  unifiedText?: string;
   routineIcons: RoutineIconType[];
   keyTermsStrip?: {
     term: string;

@@ -220,15 +220,26 @@ export async function generateLessonPptxBlob(
               rectRadius: 0.14,
             });
           }
+          const titleLine = slide.richLines?.find(
+            (l, idx) =>
+              l.style === 'title' ||
+              (idx === 0 && !slide.richLines?.some((x) => x.style === 'title'))
+          );
           pptSlide.addText(safeText(slide.title), {
             x: titleBox.x + (titleOv?.boxed ? 0.14 : 0),
             y: titleBox.y,
             w: Math.max(0.5, titleBox.w - (titleOv?.boxed ? 0.28 : 0)),
             h: titleBox.h,
             fontFace: 'Outfit',
-            fontSize: 30,
-            bold: true,
-            color: titleOnDark ? 'FFFFFF' : darkInkHex,
+            fontSize: titleLine?.fontSize ? Math.round(titleLine.fontSize * 0.58) : 30,
+            bold: titleLine?.isBold !== undefined ? titleLine.isBold : true,
+            italic: titleLine?.isItalic,
+            underline: titleLine?.isUnderline ? { style: 'sng' } : undefined,
+            color: titleLine?.color
+              ? titleLine.color.replace('#', '')
+              : titleOnDark
+              ? 'FFFFFF'
+              : darkInkHex,
           });
         }
 

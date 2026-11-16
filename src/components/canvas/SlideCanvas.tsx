@@ -40,13 +40,16 @@ import {
   ElementBoxOverride,
   PhasePalette,
   SlideData,
+  SlideLineStyle,
   SlideMediaItem,
+  SlideRichLine,
   SlideTableData,
   SlideTextBlock,
   StarterQuadrant,
   StarterQuadrantLayout,
 } from '../../types/curriculum';
 import { SlideTable } from './SlideTable';
+import { getSlideRichLines, richLinesToUnifiedText } from '../../utils/richTextHelper';
 import { PHASE_PALETTES } from '../../data/palettes';
 import { PaperCutRenderer } from './PaperCutRenderer';
 import {
@@ -2073,6 +2076,12 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       ? controlsOverride.layer === 'bottom'
       : headerOnDark;
 
+    const titleRichLine = slide.richLines?.find(
+      (l, idx) =>
+        l.style === 'title' ||
+        (idx === 0 && !slide.richLines?.some((x) => x.style === 'title'))
+    );
+
     return (
       <div className={`relative z-20 flex items-start justify-between ${headerPad}`}>
         {placeSlot(
@@ -2105,12 +2114,34 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               className={`font-extrabold tracking-tight leading-[1.08] ${
                 isStarter ? 'text-[52px]' : 'text-[60px]'
               }`}
-              style={{ color: titleOnDark ? '#FFFFFF' : neutralDark }}
+              style={{
+                color: titleRichLine?.color || (titleOnDark ? '#FFFFFF' : neutralDark),
+                fontSize: titleRichLine?.fontSize ? `${titleRichLine.fontSize}px` : undefined,
+                fontWeight: titleRichLine?.isBold !== undefined ? (titleRichLine.isBold ? 900 : 500) : undefined,
+                fontStyle: titleRichLine?.isItalic ? 'italic' : undefined,
+                textDecoration: titleRichLine?.isUnderline ? 'underline' : undefined,
+              }}
             >
               <InlineEditableText
                 value={slide.title}
                 editable={editable && !isThumbnail}
-                onCommit={(next) => onUpdateSlide?.({ title: next })}
+                onCommit={(next) => {
+                  const currentLines = getSlideRichLines(slide);
+                  const titleIdx = currentLines.findIndex(
+                    (l, idx) => l.style === 'title' || idx === 0
+                  );
+                  const updatedLines = [...currentLines];
+                  if (titleIdx >= 0) {
+                    updatedLines[titleIdx] = { ...updatedLines[titleIdx], text: next };
+                  } else {
+                    updatedLines.unshift({ text: next, style: 'title' });
+                  }
+                  onUpdateSlide?.({
+                    title: next,
+                    richLines: updatedLines,
+                    unifiedText: richLinesToUnifiedText(updatedLines),
+                  });
+                }}
               />
             </h1>
           </div>,
@@ -3528,6 +3559,187 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
         ? normalizedBlocks
         : topBlocks;
 
+    const hasCustomRichLines = Boolean(slide.richLines && slide.richLines.length > 0);
+
+    const renderRichLines = (lines: SlideRichLine[]) => {
+      const bodyLines = lines.filter((l, idx) => !(idx === 0 && l.style === 'title'));
+
+      if (bodyLines.length === 0) {
+        if (canEditComponents) {
+          return (
+            <div className="p-7 rounded-3xl border-2 border-dashed border-zinc-300 text-zinc-400 font-bold text-2xl flex items-center justify-center">
+              + Type slide explanation or bullet points in the right sidebar
+            </div>
+          );
+        }
+        return null;
+      }
+
+      return (
+        <div className="space-y-4">
+          {bodyLines.map((line) => {
+            const idx = lines.findIndex((l) => l === line);
+            const style = line.style || 'normal';
+            const isCallout = style === 'callout';
+            const isCode = style === 'code';
+            const isTitle = style === 'title';
+            const isH1 = style === 'heading-1';
+            const isH2 = style === 'heading-2';
+            const isH3 = style === 'heading-3';
+
+            const defaultFontSize = isTitle
+              ? 50
+              : isH1
+              ? 42
+              : isH2
+              ? 34
+              : isH3
+              ? 28
+              : isCallout
+              ? 28
+              : 26;
+
+            const fontSize = line.fontSize || defaultFontSize;
+
+            const defaultColor = topOnDark
+              ? '#FFFFFF'
+              : isTitle
+              ? neutralDark
+              : isH1 || isH2 || isH3
+              ? neutralAccent
+              : isCallout
+              ? neutralDark
+              : isCode
+              ? '#34D399'
+              : neutralDark;
+
+            const color = line.color || defaultColor;
+
+            const handleCommit = (nextText: string) => {
+              const nextLines = [...lines];
+              nextLines[idx] = { ...line, text: nextText };
+              onUpdateSlide?.({
+                richLines: nextLines,
+                unifiedText: richLinesToUnifiedText(nextLines),
+              });
+            };
+
+            if (isCallout) {
+              return (
+                <div
+                  key={idx}
+                  className="rounded-3xl p-6 border-2 shadow-sm transition-all"
+                  style={{
+                    backgroundColor: topOnDark
+                      ? 'rgba(255,255,255,0.14)'
+                      : 'rgba(240, 253, 244, 0.95)',
+                    borderColor: topOnDark
+                      ? 'rgba(255,255,255,0.32)'
+                      : palette.borderAccent,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: `${fontSize}px`,
+                      color,
+                      fontWeight: line.isBold !== undefined ? (line.isBold ? 800 : 500) : 700,
+                      fontStyle: line.isItalic ? 'italic' : 'normal',
+                      textDecoration: line.isUnderline ? 'underline' : 'none',
+                      lineHeight: 1.25,
+                    }}
+                  >
+                    <InlineEditableText
+                      value={line.text}
+                      editable={editable && !isThumbnail}
+                      multiline
+                      onCommit={handleCommit}
+                    />
+                  </div>
+                </div>
+              );
+            }
+
+            if (isCode) {
+              return (
+                <div
+                  key={idx}
+                  className="rounded-2xl p-5 bg-zinc-950 font-mono border border-zinc-800 shadow-lg text-emerald-300"
+                >
+                  <div
+                    style={{
+                      fontSize: `${fontSize}px`,
+                      color,
+                      fontWeight: line.isBold ? 700 : 400,
+                      fontStyle: line.isItalic ? 'italic' : 'normal',
+                      textDecoration: line.isUnderline ? 'underline' : 'none',
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    <InlineEditableText
+                      value={line.text}
+                      editable={editable && !isThumbnail}
+                      multiline
+                      onCommit={handleCommit}
+                    />
+                  </div>
+                </div>
+              );
+            }
+
+            const isBullet =
+              style === 'normal' &&
+              (line.text.startsWith('•') || line.text.startsWith('-'));
+
+            return (
+              <div
+                key={idx}
+                className={`flex items-start ${isBullet ? 'gap-4' : ''}`}
+              >
+                {isBullet && (
+                  <span
+                    className="inline-block rounded-full shrink-0 mt-3.5"
+                    style={{
+                      width: `${Math.max(9, Math.round(fontSize * 0.32))}px`,
+                      height: `${Math.max(9, Math.round(fontSize * 0.32))}px`,
+                      backgroundColor: color,
+                    }}
+                  />
+                )}
+                <div
+                  className="flex-1 min-w-0"
+                  style={{
+                    fontSize: `${fontSize}px`,
+                    color,
+                    fontWeight:
+                      line.isBold !== undefined
+                        ? line.isBold
+                          ? 800
+                          : 400
+                        : isTitle || isH1
+                        ? 800
+                        : isH2 || isH3
+                        ? 700
+                        : 500,
+                    fontStyle: line.isItalic ? 'italic' : 'normal',
+                    textDecoration: line.isUnderline ? 'underline' : 'none',
+                    lineHeight: isTitle ? 1.1 : isH1 || isH2 ? 1.2 : 1.35,
+                    letterSpacing: isTitle ? '-0.02em' : 'normal',
+                  }}
+                >
+                  <InlineEditableText
+                    value={line.text}
+                    editable={editable && !isThumbnail}
+                    multiline
+                    onCommit={handleCommit}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    };
+
     return (
       <div
         className={`relative z-20 flex-1 flex gap-10 min-h-0 ${contentPad} ${
@@ -3548,7 +3760,18 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               : 'flex-1 max-w-[1160px]'
           }`}
         >
-          {leftRenderBlocks.map((b, i) => renderCard(b, i))}
+          {hasCustomRichLines
+            ? placeSlot(
+                'slot-rich-lines',
+                renderRichLines(slide.richLines!),
+                {
+                  showBoxToggle: true,
+                  showLayerToggle: true,
+                  isBoxed: false,
+                  isBottomLayer: topOnDark,
+                }
+              )
+            : leftRenderBlocks.map((b, i) => renderCard(b, i))}
         </div>
 
         {/* Right Zone: Designated Dual-Coding Visual Area or Bottom-Layer Cards */}

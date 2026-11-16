@@ -31,6 +31,7 @@ interface ExportModalProps {
   currentSlideIndex?: number;
   onUpdateGoogleClientId: (clientId: string) => void;
   onExportAllSlidesImages?: () => Promise<void>;
+  onExportVisualPptx?: () => Promise<void>;
   onOpenShareModal?: () => void;
   onClose: () => void;
 }
@@ -42,10 +43,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   currentSlideIndex = 0,
   onUpdateGoogleClientId,
   onExportAllSlidesImages,
+  onExportVisualPptx,
   onOpenShareModal,
   onClose,
 }) => {
-  const [busy, setBusy] = useState<'pptx' | 'gslides' | 'image' | 'images-zip' | null>(null);
+  const [busy, setBusy] = useState<'visual-pptx' | 'pptx' | 'gslides' | 'image' | 'images-zip' | null>(null);
   const [statusMsg, setStatusMsg] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [googleSlideLink, setGoogleSlideLink] = useState<string | null>(null);
@@ -55,13 +57,35 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   const currentSlideTitle = lesson.slidesData[currentSlideIndex]?.title || 'Slide';
 
-  const handlePptx = async () => {
+  const handleVisualPptx = async () => {
+    setBusy('visual-pptx');
+    setError(null);
+    setStatusMsg('Rendering 1080p presentation slides...');
+    try {
+      if (onExportVisualPptx) {
+        await onExportVisualPptx();
+      } else {
+        await downloadLessonPptx(lesson, setStatusMsg);
+      }
+      setStatusMsg('Presentation (.pptx) downloaded!');
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Presentation export failed.'
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleEditablePptx = async () => {
     setBusy('pptx');
     setError(null);
-    setStatusMsg('Preparing presentation...');
+    setStatusMsg('Generating editable shapes and text...');
     try {
       await downloadLessonPptx(lesson, setStatusMsg);
-      setStatusMsg('PowerPoint (.pptx) downloaded!');
+      setStatusMsg('Editable PowerPoint (.pptx) downloaded!');
     } catch (err) {
       const msg =
         err instanceof Error
@@ -233,8 +257,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
           </div>
 
-          {/* Option 2: Universal .pptx Download (Zero Setup Google Drive Option) */}
-          <div className="p-4 rounded-2xl border border-zinc-200 bg-[#FAF6F0] space-y-2.5">
+          {/* Option 2: PowerPoint (.pptx) Exports */}
+          <div className="p-4 rounded-2xl border-2 border-zinc-900/10 bg-[#FAF6F0] space-y-3">
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-zinc-900 text-white">
                 <FileSpreadsheet size={18} />
@@ -242,30 +266,59 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <h4 className="font-bold text-zinc-900">
-                    Download Universal PowerPoint (.pptx)
+                    PowerPoint (.pptx) & Google Slides
                   </h4>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                    Zero Setup
+                    Fixed & Enhanced
                   </span>
                 </div>
                 <p className="text-xs text-zinc-600">
-                  Opens in PowerPoint OR drag straight into Google Drive (drive.google.com) to edit in Google Slides
+                  Ready to present in Microsoft PowerPoint or drop directly into Google Drive (drive.google.com)
                 </p>
               </div>
             </div>
 
-            <button
-              onClick={() => void handlePptx()}
-              disabled={busy !== null}
-              className="w-full py-2.5 rounded-xl bg-zinc-900 text-white font-bold text-xs hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-center gap-2 transition"
-            >
-              {busy === 'pptx' ? (
-                <Loader2 size={15} className="animate-spin" />
-              ) : (
-                <Download size={15} />
-              )}
-              <span>Download .pptx File</span>
-            </button>
+            <div className="space-y-2 pt-1">
+              {/* Primary Pixel-Perfect Button */}
+              <button
+                type="button"
+                onClick={() => void handleVisualPptx()}
+                disabled={busy !== null}
+                className="w-full py-2.5 px-3 rounded-xl bg-zinc-900 text-white font-bold text-xs hover:bg-zinc-800 disabled:opacity-50 flex items-center justify-between shadow-xs transition"
+              >
+                <div className="flex items-center gap-2">
+                  {busy === 'visual-pptx' ? (
+                    <Loader2 size={15} className="animate-spin text-emerald-400" />
+                  ) : (
+                    <Sparkles size={15} className="text-emerald-400" />
+                  )}
+                  <span>Download Presentation (.pptx) — Pixel-Perfect</span>
+                </div>
+                <span className="text-[10px] font-semibold text-emerald-300 bg-emerald-950/60 px-2 py-0.5 rounded-md">
+                  Recommended
+                </span>
+              </button>
+
+              {/* Native Editable PowerPoint Button */}
+              <button
+                type="button"
+                onClick={() => void handleEditablePptx()}
+                disabled={busy !== null}
+                className="w-full py-2.5 px-3 rounded-xl bg-white border border-zinc-300 text-zinc-800 font-bold text-xs hover:bg-zinc-100 disabled:opacity-50 flex items-center justify-between shadow-2xs transition"
+              >
+                <div className="flex items-center gap-2">
+                  {busy === 'pptx' ? (
+                    <Loader2 size={15} className="animate-spin text-zinc-600" />
+                  ) : (
+                    <Download size={15} />
+                  )}
+                  <span>Download Editable PowerPoint (.pptx)</span>
+                </div>
+                <span className="text-[10px] font-medium text-zinc-500">
+                  Native Shapes & Text
+                </span>
+              </button>
+            </div>
           </div>
 
           {/* Option 3: 1-Click Create in Google Slides (Requires OAuth Client ID) */}

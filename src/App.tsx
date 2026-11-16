@@ -875,6 +875,7 @@ export function App() {
                 setPresentingState({ lessonId, slideIdx })
               }
               onOpenExportModal={(lessonId) => setExportLessonId(lessonId)}
+              onUpdateSettings={handleUpdateSettings}
             />
           )}
         </main>

@@ -36,6 +36,15 @@ export async function captureSlideElementToBlob(element: HTMLElement): Promise<B
       backgroundColor: '#FFFFFF',
       windowWidth: 1920,
       windowHeight: 1080,
+      onclone: (clonedDoc) => {
+        // Sanitize any modern CSS color functions (like oklch) in cloned stylesheets
+        const styles = clonedDoc.querySelectorAll('style');
+        styles.forEach((st) => {
+          if (st.innerHTML && st.innerHTML.includes('oklch')) {
+            st.innerHTML = st.innerHTML.replace(/oklch\([^)]+\)/g, '#475569');
+          }
+        });
+      },
     });
 
     return await new Promise<Blob>((resolve, reject) => {

@@ -96,11 +96,13 @@ import {
   buildStage4SlidesPrompt,
 } from '../../services/pedagogyPrompts';
 import { ShareLessonModal } from '../export/ShareLessonModal';
+import { ExportModal } from '../export/ExportModal';
 import { syncUrlHash } from '../../utils/urlRouter';
 import {
   captureSlideElementToBlob,
   packageSlidesToZip,
 } from '../../services/imageExportService';
+import { downloadVisualLessonPptx } from '../../services/exportService';
 
 interface Stage4SlideStudioProps {
   sequence: LessonSequence;
@@ -111,6 +113,7 @@ interface Stage4SlideStudioProps {
   onUpdateSequence: (updated: LessonSequence) => void;
   onLaunchPresenter: (lessonId: string, startSlideIndex: number) => void;
   onOpenExportModal: (lessonId: string) => void;
+  onUpdateSettings?: (settings: AppSettings) => void;
 }
 
 export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
@@ -122,6 +125,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
   onUpdateSequence,
   onLaunchPresenter,
   onOpenExportModal,
+  onUpdateSettings,
 }) => {
   const lesson =
     sequence.lessons.find((l) => l.id === activeLessonId) || sequence.lessons[0];
@@ -137,6 +141,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
   const [mediaOpen, setMediaOpen] = useState(false);
   const [showWavePathEditor, setShowWavePathEditor] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isExportingAllImages, setIsExportingAllImages] = useState(false);
   const [exportProgress, setExportProgress] = useState<{
     current: number;
@@ -359,6 +364,52 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
     } catch (err) {
       console.error('Failed to export all slides to images ZIP', err);
       setError(err instanceof Error ? err.message : 'Exporting slide images failed.');
+    } finally {
+      setSelectedSlideIdx(initialIdx);
+      setIsExportingAllImages(false);
+      setExportProgress(null);
+    }
+  };
+
+  const handleExportVisualPptx = async () => {
+    if (!lesson.slidesData || lesson.slidesData.length === 0) return;
+    setIsExportingAllImages(true);
+    const initialIdx = safeIdx;
+    const slideDataUrls: string[] = [];
+
+    try {
+      for (let i = 0; i < lesson.slidesData.length; i++) {
+        const curSlide = lesson.slidesData[i];
+        setSelectedSlideIdx(i);
+        setExportProgress({
+          current: i + 1,
+          total: lesson.slidesData.length,
+          title: curSlide.title || `Slide ${i + 1}`,
+        });
+
+        // Wait for React to render the slide in the viewport
+        await new Promise((resolve) => setTimeout(resolve, 220));
+
+        const viewport = document.getElementById('active-slide-canvas-viewport');
+        if (viewport) {
+          const blob = await captureSlideElementToBlob(viewport);
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          slideDataUrls.push(dataUrl);
+        }
+      }
+
+      await downloadVisualLessonPptx(lesson, slideDataUrls, (msg) => {
+        showPasteToast(msg);
+      });
+      showPasteToast('Presentation (.pptx) downloaded successfully!');
+    } catch (err) {
+      console.error('Failed to export visual PPTX', err);
+      setError(err instanceof Error ? err.message : 'Visual presentation export failed.');
     } finally {
       setSelectedSlideIdx(initialIdx);
       setIsExportingAllImages(false);
@@ -1040,7 +1091,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
             <span>Export Images</span>
           </button>
           <button
-            onClick={() => onOpenExportModal(lesson.id)}
+            onClick={() => setIsExportModalOpen(true)}
             className="px-4 py-1.5 rounded-xl bg-zinc-900 text-white text-xs font-bold hover:bg-zinc-800 flex items-center gap-1.5"
           >
             <Download size={14} /> Export / Google Slides
@@ -3502,6 +3553,21 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
         lesson={lesson}
         currentSlideIndex={safeIdx}
         onClose={() => setIsShareModalOpen(false)}
+      />
+
+      {/* Export Presentation & Images Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        lesson={lesson}
+        settings={settings}
+        currentSlideIndex={safeIdx}
+        onUpdateGoogleClientId={(cid) => {
+          onUpdateSettings?.({ ...settings, googleClientId: cid });
+        }}
+        onExportAllSlidesImages={handleExportAllSlidesAsImages}
+        onExportVisualPptx={handleExportVisualPptx}
+        onOpenShareModal={() => setIsShareModalOpen(true)}
+        onClose={() => setIsExportModalOpen(false)}
       />
 
       {/* Progress Overlay when Exporting All Slides as High-Res Images */}

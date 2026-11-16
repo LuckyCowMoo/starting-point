@@ -1,5 +1,5 @@
 import PptxGenJS from 'pptxgenjs';
-import { PlannedLesson, SlideData } from '../types/curriculum';
+import { PlannedLesson, SlideData, SlideRichLine } from '../types/curriculum';
 import { PHASE_PALETTES } from '../data/palettes';
 import {
   rasterizePaperCutToPngDataUrl,
@@ -23,6 +23,10 @@ function safeText(val?: unknown): string {
 const pxX = (px: number) => Number(((px / 1920) * 13.333).toFixed(3));
 const pxY = (px: number) => Number(((px / 1080) * 7.5).toFixed(3));
 
+const FONT_HEADING = 'Segoe UI';
+const FONT_BODY = 'Calibri';
+const FONT_CODE = 'Consolas';
+
 function getOverrideBox(slide: SlideData, slotId: string) {
   const o = slide.elementLayouts?.[slotId];
   if (!o) return null;
@@ -33,6 +37,53 @@ function getOverrideBox(slide: SlideData, slotId: string) {
     h: Math.max(0.35, pxY(o.h)),
     layer: o.layer,
     boxed: o.boxed,
+  };
+}
+
+function resolveCanvasElementBox(slide: SlideData, el: any) {
+  const ov = slide.elementLayouts?.[el.id];
+  if (ov) {
+    return {
+      x: Math.max(0, pxX(ov.x)),
+      y: Math.max(0, pxY(ov.y)),
+      w: Math.max(0.8, pxX(ov.w)),
+      h: Math.max(0.5, pxY(ov.h)),
+      layer: ov.layer,
+      boxed: ov.boxed,
+    };
+  }
+
+  let rawX = el.x ?? 0;
+  let rawY = el.y ?? 0;
+  let rawW = el.w ?? el.width ?? el.wPercent ?? 45;
+  let rawH = el.h ?? el.height ?? el.hPercent ?? 35;
+
+  if (rawX > 100 || rawW > 100) {
+    if (rawX > 800 || rawW > 800) {
+      rawX = (rawX / 1920) * 100;
+      rawY = (rawY / 1080) * 100;
+      rawW = (rawW / 1920) * 100;
+      rawH = (rawH / 1080) * 100;
+    } else {
+      rawX = (rawX / 800) * 100;
+      rawY = (rawY / 450) * 100;
+      rawW = (rawW / 800) * 100;
+      rawH = (rawH / 450) * 100;
+    }
+  }
+
+  const xPct = Math.max(0, Math.min(92, Number(rawX) || 0));
+  const yPct = Math.max(0, Math.min(92, Number(rawY) || 0));
+  const wPct = Math.max(5, Math.min(100 - xPct, Number(rawW) || 45));
+  const hPct = Math.max(5, Math.min(100 - yPct, Number(rawH) || 35));
+
+  return {
+    x: Number(((xPct / 100) * 13.333).toFixed(3)),
+    y: Number(((yPct / 100) * 7.5).toFixed(3)),
+    w: Math.max(0.8, Number(((wPct / 100) * 13.333).toFixed(3))),
+    h: Math.max(0.5, Number(((hPct / 100) * 7.5).toFixed(3))),
+    layer: el.layer,
+    boxed: el.boxed,
   };
 }
 
@@ -176,7 +227,7 @@ export async function generateLessonPptxBlob(
 
     const revealStates =
       slide.presetId === 'mwb-starter-quadrant' && slide.starterQuadrants?.length
-        ? [0, 1, 2, 3, 4]
+        ? [0, 4]
         : [0];
 
     const headerIsDark = isSlideRegionDark(
@@ -225,12 +276,17 @@ export async function generateLessonPptxBlob(
               l.style === 'title' ||
               (idx === 0 && !slide.richLines?.some((x) => x.style === 'title'))
           );
-          pptSlide.addText(safeText(slide.title), {
+          const displayTitle =
+            revealCount === 4 && slide.presetId === 'mwb-starter-quadrant'
+              ? `${safeText(slide.title)} — Answers & Review`
+              : safeText(slide.title);
+
+          pptSlide.addText(displayTitle, {
             x: titleBox.x + (titleOv?.boxed ? 0.14 : 0),
             y: titleBox.y,
             w: Math.max(0.5, titleBox.w - (titleOv?.boxed ? 0.28 : 0)),
             h: titleBox.h,
-            fontFace: 'Outfit',
+            fontFace: FONT_HEADING,
             fontSize: titleLine?.fontSize ? Math.round(titleLine.fontSize * 0.58) : 30,
             bold: titleLine?.isBold !== undefined ? titleLine.isBold : true,
             italic: titleLine?.isItalic,
@@ -252,7 +308,7 @@ export async function generateLessonPptxBlob(
             w: ctrlOv?.w ?? 1.55,
             h: ctrlOv?.h ?? 0.42,
             align: 'center',
-            fontFace: 'JetBrains Mono',
+            fontFace: FONT_CODE,
             fontSize: 13,
             bold: true,
             color: accentHex,
@@ -347,7 +403,7 @@ export async function generateLessonPptxBlob(
             h: 0.34,
             align: 'center',
             valign: 'middle',
-            fontFace: 'Outfit',
+            fontFace: FONT_HEADING,
             fontSize: 11,
             bold: true,
             color: quadOnDark ? darkInkHex : 'FFFFFF',
@@ -360,7 +416,7 @@ export async function generateLessonPptxBlob(
             y: pos.y + 0.1,
             w: contentW,
             h: isMc || isTf ? 0.75 : Math.max(0.8, pos.h - 0.9),
-            fontFace: 'Plus Jakarta Sans',
+            fontFace: FONT_BODY,
             fontSize: hasImg ? 12.5 : 13.5,
             bold: true,
             color: quadOnDark ? 'FFFFFF' : darkInkHex,
@@ -382,7 +438,7 @@ export async function generateLessonPptxBlob(
                 h: 0.5,
                 align: 'center',
                 valign: 'middle',
-                fontFace: 'Plus Jakarta Sans',
+                fontFace: FONT_BODY,
                 fontSize: 12,
                 bold: Boolean(isRevealed && isCorrect),
                 color: isRevealed
@@ -417,7 +473,7 @@ export async function generateLessonPptxBlob(
                 y: pos.y + 1.55,
                 w: contentW,
                 h: 0.42,
-                fontFace: 'Plus Jakarta Sans',
+                fontFace: FONT_BODY,
                 fontSize: 10.5,
                 bold: true,
                 color: '065F46',
@@ -450,7 +506,7 @@ export async function generateLessonPptxBlob(
                 y: pos.y + 0.95 + row * 0.58,
                 w: colW,
                 h: 0.5,
-                fontFace: 'Plus Jakarta Sans',
+                fontFace: FONT_BODY,
                 fontSize: hasImg ? 10.5 : 11.5,
                 bold: Boolean(isRevealed && isCorrect),
                 color: optColor,
@@ -469,7 +525,7 @@ export async function generateLessonPptxBlob(
               y: pos.y + Math.max(1.0, pos.h - 0.72),
               w: contentW,
               h: 0.54,
-              fontFace: 'Plus Jakarta Sans',
+              fontFace: FONT_BODY,
               fontSize: 12,
               bold: true,
               color: 'FFFFFF',
@@ -484,7 +540,7 @@ export async function generateLessonPptxBlob(
               y: pos.y + Math.max(1.0, pos.h - 0.72),
               w: contentW,
               h: 0.54,
-              fontFace: 'Plus Jakarta Sans',
+              fontFace: FONT_BODY,
               fontSize: 11,
               color: '94A3B8',
               line: { color: 'CBD5E1', width: 1, dashType: 'dash' },
@@ -526,7 +582,7 @@ export async function generateLessonPptxBlob(
             y: dateBox.y,
             w: Math.max(1, dateBox.w - (dateOv?.boxed ? 0.28 : 0)),
             h: dateBox.h,
-            fontFace: 'Outfit',
+            fontFace: FONT_HEADING,
             fontSize: 14,
             bold: true,
             color: dateOnDark ? 'FFFFFF' : accentHex,
@@ -556,7 +612,7 @@ export async function generateLessonPptxBlob(
             y: titleBox.y,
             w: Math.max(1, titleBox.w - (titleOv?.boxed ? 0.3 : 0)),
             h: titleBox.h,
-            fontFace: 'Outfit',
+            fontFace: FONT_HEADING,
             fontSize: 38,
             bold: true,
             color: titleOnDark ? 'FFFFFF' : darkInkHex,
@@ -597,6 +653,7 @@ export async function generateLessonPptxBlob(
                 options: {
                   bold: true,
                   fontSize: 11,
+                  fontFace: FONT_HEADING,
                   color: bqOnDark ? 'FFFFFF' : accentHex,
                 },
               },
@@ -605,6 +662,7 @@ export async function generateLessonPptxBlob(
                 options: {
                   bold: true,
                   fontSize: 18,
+                  fontFace: FONT_BODY,
                   color: bqOnDark ? 'FFFFFF' : darkInkHex,
                 },
               },
@@ -614,7 +672,6 @@ export async function generateLessonPptxBlob(
               y: bqBox.y + 0.08,
               w: Math.max(1, bqBox.w - 0.36),
               h: Math.max(0.6, bqBox.h - 0.16),
-              fontFace: 'Outfit',
               valign: 'middle',
             }
           );
@@ -636,7 +693,7 @@ export async function generateLessonPptxBlob(
             y: termsBox.y,
             w: termsBox.w,
             h: termsBox.h,
-            fontFace: 'Plus Jakarta Sans',
+            fontFace: FONT_BODY,
             fontSize: 14,
             bold: true,
             color: termsOnDark ? 'FFFFFF' : accentHex,
@@ -685,7 +742,7 @@ export async function generateLessonPptxBlob(
             y: titleBox.y,
             w: titleBox.w,
             h: titleBox.h,
-            fontFace: 'Outfit',
+            fontFace: FONT_HEADING,
             fontSize: 38,
             bold: true,
             color: titleOnDark ? 'FFFFFF' : darkInkHex,
@@ -723,7 +780,7 @@ export async function generateLessonPptxBlob(
             y: bqBox.y + 0.1,
             w: Math.max(1, bqBox.w - 0.35),
             h: Math.max(0.5, bqBox.h - 0.2),
-            fontFace: 'Outfit',
+            fontFace: FONT_HEADING,
             fontSize: 22,
             bold: true,
             color: bqOnDark ? 'FFFFFF' : darkInkHex,
@@ -979,103 +1036,282 @@ export async function generateLessonPptxBlob(
             );
           });
         });
-      } else if (slide.presetId !== 'custom') {
-        // Default, dual-code, process-timeline, worked-example, plenary, hinge, active-task (unboxed by default)
-        const startX =
+      } else {
+        // Universal body content rendering (custom, dual-code, worked-example, active-task, etc.)
+        const hasRichLines = Boolean(slide.richLines && slide.richLines.length > 0);
+        const bodyRichLines = hasRichLines
+          ? slide.richLines!.filter((l, idx) => !(idx === 0 && l.style === 'title'))
+          : [];
+
+        const hasSideVisual =
+          hasBoxedMedia ||
+          isDualCodingLayout ||
+          Boolean(
+            slide.customCanvasElements?.some(
+              (el) =>
+                (el.kind === 'image' && el.imageUrl) ||
+                (el.svgCode && !el.id.includes('placeholder'))
+            )
+          );
+
+        const richOv = getOverrideBox(slide, 'slot-rich-lines');
+        const startX = richOv?.x ?? (
           slide.waveVariant === 'vertical-scurve-left' ||
           slide.waveVariant === 'dark-canvas-left-paper'
             ? 3.2
-            : 0.65;
-        const blockAreaW =
+            : 0.65
+        );
+        const blockAreaW = richOv?.w ?? (
           slide.waveVariant === 'vertical-scurve-left' ||
           slide.waveVariant === 'dark-canvas-left-paper'
             ? 9.4
-            : hasBoxedMedia || isDualCodingLayout
-            ? 6.0
-            : 11.8;
-        const count = Math.max(1, slide.bodyBlocks.length);
-        const blockH = Math.min(1.65, 5.1 / count);
+            : hasSideVisual
+            ? 6.2
+            : 11.8
+        );
+        let curY = richOv?.y ?? 1.45;
 
-        slide.bodyBlocks.forEach((b, idx) => {
-          if (hidden.has(b.id)) return;
-          const ov = getOverrideBox(slide, b.id);
-          const effectiveLayer = ov?.layer ?? b.layer ?? 'top';
-          const isDarkSurface = isBlockOnDark(effectiveLayer);
-          const isCode = b.style === 'code';
-          const isBoxed =
-            ov?.boxed !== undefined ? ov.boxed : b.style === 'boxed' || isCode;
-          const isHighlight = !isBoxed && (b.style === 'highlight' || b.style === 'challenge');
-          const box = ov || {
-            x: startX,
-            y: 1.45 + idx * (blockH + 0.18),
-            w: blockAreaW,
-            h: blockH,
+        if (bodyRichLines.length > 0) {
+          // Group consecutive text/bullet lines together so PPTX flows them naturally
+          let currentGroup: SlideRichLine[] = [];
+
+          const flushGroup = () => {
+            if (currentGroup.length === 0) return;
+            const textRuns: PptxGenJS.TextProps[] = [];
+            currentGroup.forEach((item, idx) => {
+              const itemStyle = item.style || 'normal';
+              const isH1 = itemStyle === 'heading-1';
+              const isH2 = itemStyle === 'heading-2';
+              const isH3 = itemStyle === 'heading-3';
+              const isHeading = isH1 || isH2 || isH3;
+              const isBullet =
+                itemStyle === 'normal' &&
+                (item.text.trim().startsWith('•') || item.text.trim().startsWith('-'));
+              const cleanText = isBullet
+                ? item.text.trim().replace(/^[•\-]\s*/, '')
+                : item.text;
+
+              const defaultFontSize = isH1 ? 22 : isH2 ? 18 : isH3 ? 16 : 14;
+              const fontSize = item.fontSize
+                ? Math.round(item.fontSize * 0.52)
+                : defaultFontSize;
+
+              const isDarkSurface = isBlockOnDark(richOv?.layer ?? 'top');
+              const defaultColor = isDarkSurface
+                ? 'FFFFFF'
+                : isHeading
+                ? accentHex
+                : darkInkHex;
+              const color = item.color ? cleanHex(item.color) : defaultColor;
+
+              textRuns.push({
+                text: cleanText + (idx < currentGroup.length - 1 ? '\n' : ''),
+                options: {
+                  fontSize,
+                  fontFace: isHeading ? FONT_HEADING : FONT_BODY,
+                  color,
+                  bold:
+                    item.isBold !== undefined
+                      ? item.isBold
+                      : isHeading,
+                  italic: Boolean(item.isItalic),
+                  underline: item.isUnderline ? { style: 'sng' } : undefined,
+                  bullet: isBullet ? { type: 'bullet' } : undefined,
+                  breakLine: idx < currentGroup.length - 1,
+                },
+              });
+            });
+
+            // Calculate height based on lines
+            const totalChars = currentGroup.reduce((acc, c) => acc + c.text.length, 0);
+            const lineCountEst = Math.max(
+              currentGroup.length,
+              Math.ceil(totalChars / (blockAreaW * 14))
+            );
+            const approxH = Math.min(
+              5.2,
+              Math.max(0.6, lineCountEst * 0.42 + 0.1)
+            );
+
+            pptSlide.addText(textRuns, {
+              x: startX,
+              y: curY,
+              w: blockAreaW,
+              h: approxH,
+              valign: 'top',
+              margin: 0,
+            });
+            curY += approxH + 0.14;
+            currentGroup = [];
           };
 
-          if (isBoxed) {
-            pptSlide.addShape(pptx.ShapeType.roundRect, {
-              x: box.x,
-              y: box.y,
-              w: box.w,
-              h: box.h,
-              fill: {
-                color: isCode ? '09090B' : isDarkSurface ? '1E293B' : 'FFFFFF',
-                transparency: isCode ? 0 : 6,
-              },
-              line: { color: isDarkSurface ? '64748B' : borderHex, width: 1.2 },
-              rectRadius: 0.14,
-            });
-          } else if (isHighlight) {
-            pptSlide.addShape(pptx.ShapeType.rect, {
-              x: box.x,
-              y: box.y + 0.08,
-              w: 0.08,
-              h: Math.max(0.35, box.h - 0.16),
-              fill: { color: isDarkSurface ? 'FFFFFF' : accentHex },
-              line: { color: isDarkSurface ? 'FFFFFF' : accentHex, width: 0 },
-            });
-          }
+          for (const line of bodyRichLines) {
+            if (curY >= 7.1) break;
+            const lineStyle = line.style || 'normal';
 
-          pptSlide.addText(
-            [
-              ...(b.heading
-                ? [
-                    {
-                      text: `${safeText(b.heading)}\n`,
-                      options: {
-                        bold: true,
-                        fontSize: 16,
-                        color: isDarkSurface
-                          ? 'FFFFFF'
-                          : isCode
-                          ? '34D399'
-                          : accentHex,
-                      },
-                    },
-                  ]
-                : []),
-              {
-                text: safeText(b.content),
-                options: {
-                  fontSize: 14,
-                  fontFace: isCode ? 'JetBrains Mono' : 'Plus Jakarta Sans',
-                  color: isDarkSurface
-                    ? 'F1F5F9'
-                    : isCode
-                    ? 'A7F3D0'
-                    : darkInkHex,
+            if (lineStyle === 'callout') {
+              flushGroup();
+              if (curY >= 7.0) break;
+              const isDarkSurface = isBlockOnDark(richOv?.layer ?? 'top');
+              const calloutChars = line.text.length;
+              const calloutLines = Math.max(1, Math.ceil(calloutChars / (blockAreaW * 14)));
+              const calloutH = Math.min(2.0, Math.max(0.85, calloutLines * 0.38 + 0.3));
+
+              pptSlide.addShape(pptx.ShapeType.roundRect, {
+                x: startX,
+                y: curY,
+                w: blockAreaW,
+                h: calloutH,
+                fill: {
+                  color: isDarkSurface ? '1E293B' : 'ECFDF5',
+                  transparency: 4,
                 },
-              },
-            ],
-            {
-              x: box.x + (isBoxed || isHighlight ? 0.2 : 0),
-              y: box.y + 0.06,
-              w: Math.max(0.8, box.w - (isBoxed || isHighlight ? 0.36 : 0)),
-              h: Math.max(0.4, box.h - 0.12),
-              valign: 'top',
+                line: {
+                  color: isDarkSurface ? '64748B' : accentHex,
+                  width: 1.5,
+                },
+                rectRadius: 0.14,
+              });
+
+              pptSlide.addText(safeText(line.text), {
+                x: startX + 0.2,
+                y: curY + 0.08,
+                w: Math.max(0.8, blockAreaW - 0.4),
+                h: Math.max(0.4, calloutH - 0.16),
+                fontSize: line.fontSize ? Math.round(line.fontSize * 0.52) : 13.5,
+                fontFace: FONT_BODY,
+                bold: line.isBold !== undefined ? line.isBold : true,
+                italic: Boolean(line.isItalic),
+                color: line.color
+                  ? cleanHex(line.color)
+                  : isDarkSurface
+                  ? 'FFFFFF'
+                  : '065F46',
+                valign: 'middle',
+              });
+
+              curY += calloutH + 0.16;
+            } else if (lineStyle === 'code') {
+              flushGroup();
+              if (curY >= 7.0) break;
+              const codeLines = Math.max(1, line.text.split('\n').length);
+              const codeH = Math.min(2.2, Math.max(0.85, codeLines * 0.38 + 0.3));
+
+              pptSlide.addShape(pptx.ShapeType.roundRect, {
+                x: startX,
+                y: curY,
+                w: blockAreaW,
+                h: codeH,
+                fill: { color: '09090B' },
+                line: { color: '27272A', width: 1 },
+                rectRadius: 0.12,
+              });
+
+              pptSlide.addText(safeText(line.text), {
+                x: startX + 0.2,
+                y: curY + 0.08,
+                w: Math.max(0.8, blockAreaW - 0.4),
+                h: Math.max(0.4, codeH - 0.16),
+                fontSize: line.fontSize ? Math.round(line.fontSize * 0.52) : 13,
+                fontFace: FONT_CODE,
+                bold: Boolean(line.isBold),
+                italic: Boolean(line.isItalic),
+                color: line.color ? cleanHex(line.color) : '34D399',
+                valign: 'middle',
+              });
+
+              curY += codeH + 0.16;
+            } else {
+              currentGroup.push(line);
             }
-          );
-        });
+          }
+          flushGroup();
+        } else if (slide.bodyBlocks && slide.bodyBlocks.length > 0) {
+          const count = Math.max(1, slide.bodyBlocks.length);
+          const blockH = Math.min(1.65, 5.1 / count);
+
+          slide.bodyBlocks.forEach((b, idx) => {
+            if (hidden.has(b.id)) return;
+            const ov = getOverrideBox(slide, b.id);
+            const effectiveLayer = ov?.layer ?? b.layer ?? 'top';
+            const isDarkSurface = isBlockOnDark(effectiveLayer);
+            const isCode = b.style === 'code';
+            const isBoxed =
+              ov?.boxed !== undefined ? ov.boxed : b.style === 'boxed' || isCode;
+            const isHighlight = !isBoxed && (b.style === 'highlight' || b.style === 'challenge');
+            const box = ov || {
+              x: startX,
+              y: 1.45 + idx * (blockH + 0.18),
+              w: blockAreaW,
+              h: blockH,
+            };
+
+            if (isBoxed) {
+              pptSlide.addShape(pptx.ShapeType.roundRect, {
+                x: box.x,
+                y: box.y,
+                w: box.w,
+                h: box.h,
+                fill: {
+                  color: isCode ? '09090B' : isDarkSurface ? '1E293B' : 'FFFFFF',
+                  transparency: isCode ? 0 : 6,
+                },
+                line: { color: isDarkSurface ? '64748B' : borderHex, width: 1.2 },
+                rectRadius: 0.14,
+              });
+            } else if (isHighlight) {
+              pptSlide.addShape(pptx.ShapeType.rect, {
+                x: box.x,
+                y: box.y + 0.08,
+                w: 0.08,
+                h: Math.max(0.35, box.h - 0.16),
+                fill: { color: isDarkSurface ? 'FFFFFF' : accentHex },
+                line: { color: isDarkSurface ? 'FFFFFF' : accentHex, width: 0 },
+              });
+            }
+
+            pptSlide.addText(
+              [
+                ...(b.heading
+                  ? [
+                      {
+                        text: `${safeText(b.heading)}\n`,
+                        options: {
+                          bold: true,
+                          fontSize: 16,
+                          fontFace: FONT_HEADING,
+                          color: isDarkSurface
+                            ? 'FFFFFF'
+                            : isCode
+                            ? '34D399'
+                            : accentHex,
+                        },
+                      },
+                    ]
+                  : []),
+                {
+                  text: safeText(b.content),
+                  options: {
+                    fontSize: 14,
+                    fontFace: isCode ? FONT_CODE : FONT_BODY,
+                    color: isDarkSurface
+                      ? 'F1F5F9'
+                      : isCode
+                      ? 'A7F3D0'
+                      : darkInkHex,
+                  },
+                },
+              ],
+              {
+                x: box.x + (isBoxed || isHighlight ? 0.2 : 0),
+                y: box.y + 0.06,
+                w: Math.max(0.8, box.w - (isBoxed || isHighlight ? 0.36 : 0)),
+                h: Math.max(0.4, box.h - 0.12),
+                valign: 'top',
+              }
+            );
+          });
+        }
       }
 
       // Preset media visual slot (moved or default)
@@ -1137,7 +1373,7 @@ export async function generateLessonPptxBlob(
                 color: darkInkHex,
                 bold: true,
                 fontSize: 13,
-                fontFace: 'Plus Jakarta Sans',
+                fontFace: FONT_HEADING,
                 align: 'center',
                 valign: 'middle',
               },
@@ -1155,7 +1391,7 @@ export async function generateLessonPptxBlob(
                 fill: { color: r % 2 === 0 ? 'FFFFFF' : 'F8FAFC' },
                 color: darkInkHex,
                 fontSize: 12,
-                fontFace: 'Plus Jakarta Sans',
+                fontFace: FONT_BODY,
                 align: 'left',
                 valign: 'middle',
               },
@@ -1174,17 +1410,34 @@ export async function generateLessonPptxBlob(
 
       // Freeform & Custom Canvas Elements (supported on ALL presets!)
       if (slide.customCanvasElements && slide.customCanvasElements.length > 0) {
+        const hasRealImageOnSlide = slide.customCanvasElements.some(
+          (c) => c.kind === 'image' && Boolean(c.imageUrl) && !c.id.includes('placeholder')
+        );
+
         for (const el of slide.customCanvasElements) {
           if (hidden.has(el.id)) continue;
-          const ov = getOverrideBox(slide, el.id);
-          const x = ov?.x ?? (el.x / 100) * 13.333;
-          const y = ov?.y ?? (el.y / 100) * 7.5;
-          const w = ov?.w ?? Math.max(0.8, (el.w / 100) * 13.333);
-          const h = ov?.h ?? Math.max(0.5, (el.h / 100) * 7.5);
-          const effectiveLayer = ov?.layer ?? el.layer ?? 'top';
+
+          // Filter out stale template placeholders superseded by an uploaded image
+          if (
+            hasRealImageOnSlide &&
+            (el.id.includes('placeholder') || (el.svgCode && el.svgCode.includes('Insert ')))
+          ) {
+            continue;
+          }
+
+          const pos = resolveCanvasElementBox(slide, el);
+          const x = pos.x;
+          const y = pos.y;
+          const w = pos.w;
+          const h = pos.h;
+          const effectiveLayer = pos.layer ?? el.layer ?? 'top';
           const isDarkSurface = isBlockOnDark(effectiveLayer) || el.tone === 'dark';
           const isBoxed =
-            ov?.boxed !== undefined ? ov.boxed : Boolean(el.boxed);
+            pos.boxed !== undefined
+              ? pos.boxed
+              : el.boxed !== undefined
+              ? el.boxed
+              : el.kind === 'table' || el.kind === 'badge';
 
           if (el.kind === 'table' || el.tableData) {
             const tData = el.tableData;
@@ -1199,7 +1452,7 @@ export async function generateLessonPptxBlob(
                       color: isDarkSurface ? 'FFFFFF' : darkInkHex,
                       bold: true,
                       fontSize: 12,
-                      fontFace: 'Plus Jakarta Sans',
+                      fontFace: FONT_HEADING,
                       align: 'center',
                       valign: 'middle',
                     },
@@ -1217,7 +1470,7 @@ export async function generateLessonPptxBlob(
                       fill: { color: isDarkSurface ? '0F172A' : (r % 2 === 0 ? 'FFFFFF' : 'F8FAFC') },
                       color: isDarkSurface ? 'E2E8F0' : darkInkHex,
                       fontSize: 11,
-                      fontFace: 'Plus Jakarta Sans',
+                      fontFace: FONT_BODY,
                       align: 'left',
                       valign: 'middle',
                     },
@@ -1276,14 +1529,14 @@ export async function generateLessonPptxBlob(
             if (png) {
               pptSlide.addImage({
                 data: png,
-                x: x + 0.12,
-                y: y + 0.12,
-                w: Math.max(0.5, w - 0.24),
-                h: Math.max(0.4, h - 0.24),
+                x: x + (isBoxed ? 0.12 : 0),
+                y: y + (isBoxed ? 0.12 : 0),
+                w: Math.max(0.5, w - (isBoxed ? 0.24 : 0)),
+                h: Math.max(0.4, h - (isBoxed ? 0.24 : 0)),
                 sizing: {
                   type: 'contain',
-                  w: Math.max(0.5, w - 0.24),
-                  h: Math.max(0.4, h - 0.24),
+                  w: Math.max(0.5, w - (isBoxed ? 0.24 : 0)),
+                  h: Math.max(0.4, h - (isBoxed ? 0.24 : 0)),
                 },
               });
             }
@@ -1299,36 +1552,37 @@ export async function generateLessonPptxBlob(
                 rectRadius: 0.14,
               });
             }
-            pptSlide.addText(
-              [
-                ...(el.heading
-                  ? [
-                      {
-                        text: `${safeText(el.heading)}\n`,
-                        options: {
-                          bold: true,
-                          fontSize: 15,
-                          color: isDarkSurface ? 'FFFFFF' : accentHex,
-                        },
-                      },
-                    ]
-                  : []),
-                {
-                  text: safeText(el.content),
-                  options: {
-                    fontSize: 13.5,
-                    color: isDarkSurface ? 'F1F5F9' : darkInkHex,
-                  },
+            const runs: any[] = [];
+            if (el.heading && el.heading.trim()) {
+              runs.push({
+                text: `${safeText(el.heading)}\n`,
+                options: {
+                  bold: true,
+                  fontSize: 15,
+                  fontFace: FONT_HEADING,
+                  color: isDarkSurface ? 'FFFFFF' : accentHex,
                 },
-              ],
-              {
-                x: x + (isBoxed ? 0.18 : 0),
+              });
+            }
+            if (el.content && el.content.trim()) {
+              runs.push({
+                text: safeText(el.content),
+                options: {
+                  fontSize: 13,
+                  fontFace: FONT_BODY,
+                  color: isDarkSurface ? 'F1F5F9' : darkInkHex,
+                },
+              });
+            }
+            if (runs.length > 0) {
+              pptSlide.addText(runs, {
+                x: x + (isBoxed ? 0.18 : 0.05),
                 y: y + 0.08,
-                w: Math.max(0.8, w - (isBoxed ? 0.36 : 0)),
+                w: Math.max(0.8, w - (isBoxed ? 0.36 : 0.1)),
                 h: Math.max(0.4, h - 0.16),
                 valign: 'top',
-              }
-            );
+              });
+            }
           }
         }
       }
@@ -1352,7 +1606,61 @@ export async function downloadLessonPptx(
     .replace(/^-|-$/g, '') || 'lesson';
   const a = document.createElement('a');
   a.href = url;
-  a.download = `L${lesson.lessonNumber}-${safeName}.pptx`;
+  a.download = `L${lesson.lessonNumber}-${safeName}-Editable.pptx`;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export async function generateVisualLessonPptxBlob(
+  lesson: PlannedLesson,
+  slideDataUrls: string[],
+  onProgress?: (msg: string) => void
+): Promise<Blob> {
+  const pptx = new PptxGenJS();
+  pptx.layout = 'LAYOUT_WIDE';
+  pptx.author = 'Starting Point';
+  pptx.title = safeText(lesson.title) || 'Lesson Presentation';
+
+  for (let i = 0; i < lesson.slidesData.length; i++) {
+    const slide = lesson.slidesData[i];
+    const dataUrl = slideDataUrls[i];
+    onProgress?.(`Adding 1080p slide ${i + 1} of ${lesson.slidesData.length}...`);
+
+    const pptSlide = pptx.addSlide();
+    if (dataUrl) {
+      pptSlide.addImage({
+        data: dataUrl,
+        x: 0,
+        y: 0,
+        w: 13.333,
+        h: 7.5,
+      });
+    }
+    addSpeakerNotesAndBadges(pptSlide, slide);
+  }
+
+  onProgress?.('Packaging presentation...');
+  const out = await pptx.write({ outputType: 'blob' });
+  return out as Blob;
+}
+
+export async function downloadVisualLessonPptx(
+  lesson: PlannedLesson,
+  slideDataUrls: string[],
+  onProgress?: (msg: string) => void
+): Promise<void> {
+  const blob = await generateVisualLessonPptxBlob(lesson, slideDataUrls, onProgress);
+  const url = URL.createObjectURL(blob);
+  const safeName = (lesson.title || 'lesson')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'lesson';
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `L${lesson.lessonNumber}-${safeName}-Presentation.pptx`;
   a.rel = 'noopener';
   document.body.appendChild(a);
   a.click();
@@ -1379,7 +1687,8 @@ interface GoogleTokenWindow extends Window {
 export async function exportLessonToGoogleSlides(
   lesson: PlannedLesson,
   googleClientId: string,
-  onProgress?: (msg: string) => void
+  onProgress?: (msg: string) => void,
+  customPptxBlob?: Blob
 ): Promise<{ id: string; webViewLink: string }> {
   if (!googleClientId.trim()) {
     throw new Error(
@@ -1410,7 +1719,7 @@ export async function exportLessonToGoogleSlides(
     client.requestAccessToken();
   });
 
-  const pptxBlob = await generateLessonPptxBlob(lesson, onProgress);
+  const pptxBlob = customPptxBlob || (await generateLessonPptxBlob(lesson, onProgress));
   onProgress?.('Uploading & converting to native Google Slides...');
 
   const metadata = {

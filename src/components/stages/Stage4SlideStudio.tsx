@@ -2331,40 +2331,96 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                       </button>
                     )}
                   </div>
-                  {slide.mediaItem && slide.mediaItem.type === 'image' && (
-                    <div className="flex items-center gap-1.5 pt-1">
-                      <span className="text-[10px] font-semibold text-zinc-500 mr-1">
-                        Placement:
-                      </span>
-                      {(
-                        [
-                          { id: 'boxed-card', label: 'Boxed Frame' },
-                          { id: 'fill-bottom-layer', label: 'Fill Bottom Layer' },
-                        ] as const
-                      ).map((opt) => {
-                        const active =
-                          (slide.mediaItem?.placement ?? 'boxed-card') === opt.id;
-                        return (
-                          <button
-                            key={opt.id}
-                            onClick={() =>
-                              updateActiveSlide({
-                                mediaItem: {
-                                  ...slide.mediaItem!,
-                                  placement: opt.id,
-                                },
-                              })
-                            }
-                            className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition ${
-                              active
-                                ? 'bg-zinc-900 text-white border-zinc-900'
-                                : 'bg-white text-zinc-700 border-zinc-200 hover:border-zinc-400'
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        );
-                      })}
+                  {slide.mediaItem && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-semibold text-zinc-500 mr-1">
+                          Frame:
+                        </span>
+                        {(
+                          [
+                            { id: 'boxed-card', label: 'Boxed Card' },
+                            { id: 'unboxed', label: 'Transparent (No Box)' },
+                            { id: 'fill-bottom-layer', label: 'Fill Bottom Wave' },
+                          ] as const
+                        ).map((opt) => {
+                          const active =
+                            (slide.mediaItem?.placement ??
+                              (slide.mediaItem?.boxed === false ? 'unboxed' : 'boxed-card')) === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => {
+                                const isUnboxed = opt.id === 'unboxed';
+                                updateActiveSlide({
+                                  mediaItem: {
+                                    ...slide.mediaItem!,
+                                    placement: opt.id,
+                                    boxed: !isUnboxed,
+                                    frameShape: isUnboxed ? 'clean' : 'rounded-card',
+                                    cropFit: isUnboxed ? 'contain' : slide.mediaItem!.cropFit,
+                                  },
+                                  elementLayouts: {
+                                    ...(slide.elementLayouts || {}),
+                                    'slot-media': {
+                                      ...(slide.elementLayouts?.['slot-media'] || {
+                                        x: 0,
+                                        y: 0,
+                                        w: 600,
+                                        h: 600,
+                                      }),
+                                      boxed: !isUnboxed,
+                                    },
+                                  },
+                                });
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition ${
+                                active
+                                  ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs'
+                                  : 'bg-white text-zinc-700 border-zinc-200 hover:border-zinc-400'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-semibold text-zinc-500 mr-1">
+                          Crop:
+                        </span>
+                        {(
+                          [
+                            { id: 'contain', label: 'Fit Whole (Contain)' },
+                            { id: 'cover', label: 'Fill Frame (Cover)' },
+                          ] as const
+                        ).map((opt) => {
+                          const active = (slide.mediaItem?.cropFit ?? 'contain') === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() =>
+                                updateActiveSlide({
+                                  mediaItem: {
+                                    ...slide.mediaItem!,
+                                    cropFit: opt.id,
+                                  },
+                                })
+                              }
+                              className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition ${
+                                active
+                                  ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs'
+                                  : 'bg-white text-zinc-700 border-zinc-200 hover:border-zinc-400'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -3200,6 +3256,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                         ...q,
                         imageUrl: media.type === 'image' ? media.url : undefined,
                         svgCode: media.type === 'svg-diagram' ? media.svgCode : undefined,
+                        boxed: media.boxed !== undefined ? media.boxed : media.placement !== 'unboxed',
                       }
                     : q
                 ),
@@ -3220,6 +3277,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                         ...t,
                         imageUrl: media.type === 'image' ? media.url : undefined,
                         svgCode: media.type === 'svg-diagram' ? media.svgCode : undefined,
+                        boxed: media.boxed !== undefined ? media.boxed : media.placement !== 'unboxed',
                       }
                     : t
                 ),
@@ -3275,6 +3333,7 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                       imageUrl: media.type === 'image' ? media.url : undefined,
                       cropFit: media.cropFit,
                       heading: media.title,
+                      boxed: media.boxed !== undefined ? media.boxed : media.placement !== 'unboxed',
                     }
                   : el
               ),

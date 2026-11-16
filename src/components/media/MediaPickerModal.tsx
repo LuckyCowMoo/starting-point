@@ -45,7 +45,10 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [cropFit, setCropFit] = useState<'cover' | 'contain'>(
-    currentMedia?.cropFit || 'cover'
+    currentMedia?.cropFit || 'contain'
+  );
+  const [isBoxed, setIsBoxed] = useState<boolean>(
+    currentMedia?.placement !== 'unboxed' && currentMedia?.frameShape !== 'clean' && currentMedia?.boxed !== false
   );
   const [frameShape, setFrameShape] = useState<SlideMediaItem['frameShape']>(
     currentMedia?.frameShape || 'rounded-card'
@@ -93,8 +96,10 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
           title: label || file.name,
           url: reader.result,
           caption: label || file.name,
-          cropFit,
-          frameShape,
+          cropFit: isBoxed ? cropFit : 'contain',
+          frameShape: isBoxed ? frameShape : 'clean',
+          placement: isBoxed ? 'boxed-card' : 'unboxed',
+          boxed: isBoxed,
         });
         onClose();
       }
@@ -244,29 +249,53 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
             ))}
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
-            <label className="text-zinc-500 font-medium">Crop:</label>
+          <div className="flex items-center gap-2 text-xs flex-wrap">
+            <label className="text-zinc-500 font-medium">Card Style:</label>
+            <select
+              value={isBoxed ? 'boxed' : 'unboxed'}
+              onChange={(e) => {
+                const boxedVal = e.target.value === 'boxed';
+                setIsBoxed(boxedVal);
+                if (!boxedVal) {
+                  setCropFit('contain');
+                  setFrameShape('clean');
+                } else {
+                  setFrameShape('rounded-card');
+                }
+              }}
+              className="px-2 py-1 rounded-lg border border-zinc-300 bg-white font-bold text-zinc-800"
+            >
+              <option value="boxed">Boxed Card (White Box + Shadow)</option>
+              <option value="unboxed">Transparent (No Box, Floating PNG/SVG)</option>
+            </select>
+
+            <label className="text-zinc-500 font-medium ml-1">Crop:</label>
             <select
               value={cropFit}
               onChange={(e) => setCropFit(e.target.value as 'cover' | 'contain')}
               className="px-2 py-1 rounded-lg border border-zinc-300 bg-white"
             >
-              <option value="cover">Crop to Fill Frame</option>
-              <option value="contain">Fit Whole Visual</option>
+              <option value="contain">Fit Whole Visual (Contain)</option>
+              <option value="cover">Crop to Fill Frame (Cover)</option>
             </select>
-            <label className="text-zinc-500 font-medium ml-1">Mask:</label>
-            <select
-              value={frameShape}
-              onChange={(e) =>
-                setFrameShape(e.target.value as SlideMediaItem['frameShape'])
-              }
-              className="px-2 py-1 rounded-lg border border-zinc-300 bg-white"
-            >
-              <option value="rounded-card">Rounded Card</option>
-              <option value="organic-blob">Organic Paper-Cut Mask</option>
-              <option value="circle">Circular Frame</option>
-              <option value="clean">Sharp Clean Frame</option>
-            </select>
+
+            {isBoxed && (
+              <>
+                <label className="text-zinc-500 font-medium ml-1">Mask:</label>
+                <select
+                  value={frameShape}
+                  onChange={(e) =>
+                    setFrameShape(e.target.value as SlideMediaItem['frameShape'])
+                  }
+                  className="px-2 py-1 rounded-lg border border-zinc-300 bg-white"
+                >
+                  <option value="rounded-card">Rounded Card</option>
+                  <option value="organic-blob">Organic Paper-Cut Mask</option>
+                  <option value="circle">Circular Frame</option>
+                  <option value="clean">Sharp Clean Frame</option>
+                </select>
+              </>
+            )}
           </div>
         </div>
 
@@ -330,8 +359,10 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
                         url: item.fullUrl,
                         attribution: item.attribution,
                         caption: item.title,
-                        cropFit,
-                        frameShape,
+                        cropFit: isBoxed ? cropFit : 'contain',
+                        frameShape: isBoxed ? frameShape : 'clean',
+                        placement: isBoxed ? 'boxed-card' : 'unboxed',
+                        boxed: isBoxed,
                       });
                       onClose();
                     }}
@@ -396,7 +427,9 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
                                 title: tpl.title,
                                 svgCode: tpl.svgCode,
                                 cropFit: 'contain',
-                                frameShape,
+                                frameShape: isBoxed ? frameShape : 'clean',
+                                placement: isBoxed ? 'boxed-card' : 'unboxed',
+                                boxed: isBoxed,
                               });
                               onClose();
                             }}
@@ -433,7 +466,9 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
                       title: 'Custom SVG Diagram',
                       svgCode: customSvg,
                       cropFit: 'contain',
-                      frameShape,
+                      frameShape: isBoxed ? frameShape : 'clean',
+                      placement: isBoxed ? 'boxed-card' : 'unboxed',
+                      boxed: isBoxed,
                     });
                     onClose();
                   }}

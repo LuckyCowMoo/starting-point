@@ -108,6 +108,7 @@ export interface StarterQuadrant {
   imageUrl?: string;
   svgCode?: string;
   imagePrompt?: string;
+  boxed?: boolean;
 }
 
 export type DualCodeIconId =
@@ -166,7 +167,8 @@ export interface SlideMediaItem {
   caption?: string;
   cropFit: 'cover' | 'contain';
   frameShape: 'rounded-card' | 'organic-blob' | 'circle' | 'clean';
-  placement?: 'fill-bottom-layer' | 'boxed-card' | 'anchor-right' | 'anchor-left';
+  placement?: 'fill-bottom-layer' | 'boxed-card' | 'anchor-right' | 'anchor-left' | 'unboxed';
+  boxed?: boolean;
 }
 
 export interface PaperCutLayer {

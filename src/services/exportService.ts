@@ -1087,6 +1087,25 @@ export async function generateLessonPptxBlob(
           w: slide.presetId === 'comparison-two-column' ? 4.4 : 5.5,
           h: 5.0,
         };
+        const isBoxed =
+          mediaOv?.boxed !== undefined
+            ? mediaOv.boxed
+            : slide.mediaItem.boxed !== undefined
+            ? slide.mediaItem.boxed
+            : slide.mediaItem.placement !== 'unboxed' && slide.mediaItem.frameShape !== 'clean';
+
+        if (isBoxed) {
+          pptSlide.addShape(pptx.ShapeType.roundRect, {
+            x: mBox.x,
+            y: mBox.y,
+            w: mBox.w,
+            h: mBox.h,
+            rectRadius: 0.15,
+            fill: { color: 'FFFFFF' },
+            line: { color: 'E2E8F0', width: 2 },
+          });
+        }
+
         let dataUri: string | null = null;
         if (slide.mediaItem.type === 'svg-diagram' && slide.mediaItem.svgCode) {
           dataUri = await svgStringToPngDataUrl(slide.mediaItem.svgCode);
@@ -1100,7 +1119,7 @@ export async function generateLessonPptxBlob(
             y: mBox.y,
             w: mBox.w,
             h: mBox.h,
-            sizing: { type: 'contain', w: mBox.w, h: mBox.h },
+            sizing: { type: slide.mediaItem.cropFit === 'cover' ? 'cover' : 'contain', w: mBox.w, h: mBox.h },
           });
         }
       }
@@ -1215,6 +1234,17 @@ export async function generateLessonPptxBlob(
               });
             }
           } else if (el.kind === 'image' && el.imageUrl) {
+            if (isBoxed) {
+              pptSlide.addShape(pptx.ShapeType.roundRect, {
+                x,
+                y,
+                w,
+                h,
+                rectRadius: 0.15,
+                fill: { color: 'FFFFFF' },
+                line: { color: 'E2E8F0', width: 2 },
+              });
+            }
             const imgUri = await imageUrlToDataUrl(el.imageUrl);
             if (imgUri) {
               pptSlide.addImage({
@@ -1224,7 +1254,7 @@ export async function generateLessonPptxBlob(
                 w,
                 h,
                 sizing: {
-                  type: el.cropFit === 'contain' ? 'contain' : 'cover',
+                  type: el.cropFit === 'cover' ? 'cover' : 'contain',
                   w,
                   h,
                 },

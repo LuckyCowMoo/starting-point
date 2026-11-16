@@ -1786,6 +1786,16 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     if (hiddenSet.has(slotId)) return null;
     if (effectiveSideConfig) return null;
 
+    const mediaOverride = slide.elementLayouts?.[slotId];
+    const isBoxed =
+      mediaOverride?.boxed !== undefined
+        ? mediaOverride.boxed
+        : media?.boxed !== undefined
+        ? media.boxed
+        : media?.placement === 'unboxed' || media?.frameShape === 'clean'
+        ? false
+        : true;
+
     let inner: React.ReactNode = null;
     if (!media || media.placement === 'fill-bottom-layer') {
       if (!requiredSlotLabel) return null;
@@ -1853,9 +1863,11 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
             }
           }}
           title={canPick ? 'Click to change visual or press Ctrl+V to paste new image' : undefined}
-          className={`relative group rounded-3xl overflow-hidden shadow-2xl bg-white border-4 border-white/90 flex flex-col w-full h-full flex-1 ${
-            canPick ? 'cursor-pointer transition' : ''
-          }`}
+          className={`relative group flex flex-col items-center justify-center w-full h-full flex-1 transition-all ${
+            isBoxed
+              ? 'rounded-3xl overflow-hidden shadow-2xl bg-white border-4 border-white/90'
+              : 'bg-transparent border-0 shadow-none overflow-visible'
+          } ${canPick ? 'cursor-pointer' : ''}`}
         >
           {canPick && (
             <div className="absolute top-3 right-3 bg-zinc-900/85 text-white px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md opacity-0 group-hover:opacity-100 transition pointer-events-none z-10">
@@ -1865,7 +1877,9 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           )}
           {media.type === 'svg-diagram' && media.svgCode ? (
             <div
-              className="flex-1 w-full h-full flex items-center justify-center p-5 bg-white overflow-hidden"
+              className={`flex-1 w-full h-full flex items-center justify-center overflow-hidden ${
+                isBoxed ? 'p-5 bg-white' : 'p-2 bg-transparent'
+              }`}
               dangerouslySetInnerHTML={{ __html: media.svgCode }}
             />
           ) : (
@@ -1873,7 +1887,11 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               src={media.url || ''}
               alt={media.title}
               className={`w-full h-full ${
-                media.cropFit === 'contain' ? 'object-contain bg-white' : 'object-cover'
+                media.cropFit === 'cover'
+                  ? 'object-cover'
+                  : isBoxed
+                  ? 'object-contain bg-white'
+                  : 'object-contain bg-transparent'
               }`}
             />
           )}
@@ -1886,12 +1904,39 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     return placeSlot(slotId, inner, {
       stretchHeight: true,
       className: isMoved ? '' : sizeClass,
+      showBoxToggle: Boolean(media),
+      isBoxed,
+      onToggleBoxed: () => {
+        const nextBoxed = !isBoxed;
+        if (media) {
+          onUpdateSlide?.({
+            mediaItem: {
+              ...media,
+              boxed: nextBoxed,
+              placement: nextBoxed ? 'boxed-card' : 'unboxed',
+              frameShape: nextBoxed ? 'rounded-card' : 'clean',
+            },
+            elementLayouts: {
+              ...(slide.elementLayouts || {}),
+              [slotId]: {
+                ...(slide.elementLayouts?.[slotId] || {
+                  x: 0,
+                  y: 0,
+                  w: 600,
+                  h: 600,
+                }),
+                boxed: nextBoxed,
+              },
+            },
+          });
+        }
+      },
       extraActions: canPick ? (
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onOpenMediaPicker?.();
+            onOpenMediaPicker?.(slotId);
           }}
           className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[17px] font-bold"
         >
@@ -2871,58 +2916,85 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               );
 
               // Image Box for Identify-Picture Layouts
-              const renderPictureBox = () => (
-                <div
-                  data-slot-id={`quad-media-${idx}`}
-                  className={`w-[220px] shrink-0 h-full max-h-[220px] rounded-2xl border-2 overflow-hidden relative flex flex-col items-center justify-center cursor-pointer group transition ${
-                    q.imageUrl || q.svgCode
-                      ? 'bg-white border-zinc-200 hover:border-emerald-500 shadow-xs'
-                      : 'bg-zinc-100/90 border-dashed border-zinc-300 hover:border-emerald-500 hover:bg-zinc-50'
-                  }`}
-                  onMouseEnter={() => {
-                    if (editable && !isThumbnail) onHoverImageTarget?.(`quad-media-${idx}`);
-                  }}
-                  onMouseLeave={() => {
-                    if (editable && !isThumbnail) onHoverImageTarget?.(null);
-                  }}
-                  onClick={(e) => {
-                    if (editable && !isThumbnail) {
-                      e.stopPropagation();
-                      onOpenMediaPicker?.(`quad-media-${idx}`);
-                    }
-                  }}
-                >
-                  {q.svgCode ? (
-                    <div
-                      className="w-full h-full p-2 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-h-[190px] [&>svg]:object-contain"
-                      dangerouslySetInnerHTML={{ __html: q.svgCode }}
-                    />
-                  ) : q.imageUrl ? (
-                    <img
-                      src={q.imageUrl}
-                      alt={cleanQuestion}
-                      className="w-full h-full object-contain p-1.5 rounded-xl"
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center gap-1.5 p-3 text-center text-zinc-500 group-hover:text-emerald-700">
-                      <ImagePlus size={36} className="text-zinc-400 group-hover:text-emerald-600 transition" />
-                      <span className="text-[14px] font-bold leading-tight">
-                        {editable && !isThumbnail ? 'Click or Ctrl+V' : 'Visual Diagram'}
-                      </span>
-                      <span className="text-[11px] font-medium text-zinc-400">
-                        Diagram / Picture
-                      </span>
-                    </div>
-                  )}
+              const renderPictureBox = () => {
+                const picBoxed = q.boxed !== undefined ? q.boxed : true;
+                return (
+                  <div
+                    data-slot-id={`quad-media-${idx}`}
+                    className={`w-[220px] shrink-0 h-full max-h-[220px] rounded-2xl overflow-hidden relative flex flex-col items-center justify-center cursor-pointer group transition ${
+                      q.imageUrl || q.svgCode
+                        ? picBoxed
+                          ? 'bg-white border-2 border-zinc-200 hover:border-emerald-500 shadow-xs'
+                          : 'bg-transparent border-2 border-transparent hover:border-emerald-500/50'
+                        : 'bg-zinc-100/90 border-2 border-dashed border-zinc-300 hover:border-emerald-500 hover:bg-zinc-50'
+                    }`}
+                    onMouseEnter={() => {
+                      if (editable && !isThumbnail) onHoverImageTarget?.(`quad-media-${idx}`);
+                    }}
+                    onMouseLeave={() => {
+                      if (editable && !isThumbnail) onHoverImageTarget?.(null);
+                    }}
+                    onClick={(e) => {
+                      if (editable && !isThumbnail) {
+                        e.stopPropagation();
+                        onOpenMediaPicker?.(`quad-media-${idx}`);
+                      }
+                    }}
+                  >
+                    {q.svgCode ? (
+                      <div
+                        className={`w-full h-full p-2 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-h-[190px] [&>svg]:object-contain ${
+                          picBoxed ? 'bg-white' : 'bg-transparent'
+                        }`}
+                        dangerouslySetInnerHTML={{ __html: q.svgCode }}
+                      />
+                    ) : q.imageUrl ? (
+                      <img
+                        src={q.imageUrl}
+                        alt={cleanQuestion}
+                        className={`w-full h-full object-contain p-1.5 rounded-xl ${
+                          picBoxed ? 'bg-white' : 'bg-transparent'
+                        }`}
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center gap-1.5 p-3 text-center text-zinc-500 group-hover:text-emerald-700">
+                        <ImagePlus size={36} className="text-zinc-400 group-hover:text-emerald-600 transition" />
+                        <span className="text-[14px] font-bold leading-tight">
+                          {editable && !isThumbnail ? 'Click or Ctrl+V' : 'Visual Diagram'}
+                        </span>
+                        <span className="text-[11px] font-medium text-zinc-400">
+                          Diagram / Picture
+                        </span>
+                      </div>
+                    )}
 
-                  {editable && !isThumbnail && (q.imageUrl || q.svgCode) && (
-                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-zinc-900/90 text-white px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 shadow-md transition">
-                      <ImagePlus size={12} />
-                      <span>Change</span>
-                    </div>
-                  )}
-                </div>
-              );
+                    {editable && !isThumbnail && (q.imageUrl || q.svgCode) && (
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex items-center gap-1 transition">
+                        <button
+                          type="button"
+                          title={picBoxed ? 'Remove white card box (transparent floating image)' : 'Add white card box around image'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onUpdateSlide?.({
+                              starterQuadrants: quads.map((item, k) =>
+                                k === idx ? { ...item, boxed: !picBoxed } : item
+                              ),
+                            });
+                          }}
+                          className="bg-zinc-900/90 hover:bg-zinc-800 text-white px-2 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 shadow-md"
+                        >
+                          <Square size={11} />
+                          <span>{picBoxed ? 'Unboxed' : 'Boxed'}</span>
+                        </button>
+                        <div className="bg-zinc-900/90 text-white px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 shadow-md">
+                          <ImagePlus size={12} />
+                          <span>Change</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              };
 
               const quadNode = (
                 <div
@@ -3919,13 +3991,21 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
             onMouseLeave={() => {
               if (editable && !isThumbnail) onHoverImageTarget?.(null);
             }}
-            className="group relative w-full h-full rounded-3xl overflow-hidden shadow-2xl border-4 border-white/90 bg-white"
+            className={`group relative w-full h-full flex items-center justify-center transition-all ${
+              isBoxed
+                ? 'rounded-3xl overflow-hidden shadow-2xl border-4 border-white/90 bg-white'
+                : 'bg-transparent border-0 shadow-none overflow-visible'
+            }`}
           >
             <img
               src={el.imageUrl}
               alt={el.heading || 'Slide visual'}
               className={`w-full h-full ${
-                el.cropFit === 'contain' ? 'object-contain bg-white' : 'object-cover'
+                el.cropFit === 'cover'
+                  ? 'object-cover'
+                  : isBoxed
+                  ? 'object-contain bg-white'
+                  : 'object-contain bg-transparent'
               }`}
             />
             {editable && !isThumbnail && (
@@ -3978,7 +4058,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 ? 'rounded-2xl border-2 border-dashed border-sky-400 bg-sky-50/70'
                 : isBoxed
                 ? 'rounded-3xl bg-white/95 border-2 border-slate-200/90 shadow-lg'
-                : 'rounded-3xl bg-white/92 shadow-md'
+                : 'rounded-3xl bg-transparent border-0 shadow-none'
             }`}
             style={
               isBoxed
@@ -4084,7 +4164,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           showSingleToolbar={selectedIds.length <= 1}
           isBoxed={isBoxed}
           isBottomLayer={effectiveLayer === 'bottom'}
-          showBoxToggle={!isMedia || el.kind === 'diagram'}
+          showBoxToggle={true}
           showLayerToggle={!isMedia}
           stretchHeight
           onSelect={(isCtrl) => handleSelectSlot(el.id, isCtrl)}

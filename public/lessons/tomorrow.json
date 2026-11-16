@@ -1,0 +1,374 @@
+{
+  "id": "lesson-net-2",
+  "lessonNumber": 2,
+  "title": "Packet Switching & Routing",
+  "durationMinutes": 60,
+  "timeBudgetMinutes": 51,
+  "bufferMinutes": 9,
+  "summary": "Model packet structure (Header, Payload, Footer) and run an unplugged whole-class Packet Relay simulation to prove how out-of-order packets reassemble reliably.",
+  "knowIds": [
+    "know-2"
+  ],
+  "doIds": [
+    "do-2"
+  ],
+  "understandIds": [
+    "und-1"
+  ],
+  "starterRetrievalFocus": {
+    "q1LastLesson": "Lesson 1: What is the single point of failure in a Star topology?",
+    "q2LastWeek": "Lesson 1: Distinguish what a Switch does vs what a Router does.",
+    "q3EarlierTopic": "Lesson 1: Give one reason Mesh networks are chosen for critical systems.",
+    "q4Challenge": "Prior unit: Convert the 4-bit binary number 1011 into denary."
+  },
+  "activeTaskTypes": [
+    "22 mins — Unplugged classroom Packet Relay simulation & checksum verification"
+  ],
+  "pedagogicalRationale": "Follows concrete hardware (L1) with embodied movement (packet relay) so pupils experience out-of-order arrival and reassembly firsthand before tackling protocols in L3.",
+  "stage3Approved": true,
+  "slidesBlueprint": [
+    {
+      "id": "bp-2-1",
+      "slideNumber": 1,
+      "title": "Starter",
+      "phase": "starter",
+      "presetId": "mwb-starter-quadrant",
+      "allocatedMinutes": 5,
+      "contentSummary": "Retrieves Lesson 1 Star failure, Switch vs Router, Mesh use case, and prior unit binary conversion.",
+      "pupilActivity": "Answer 4 quadrants on MWBs; mark step-by-step.",
+      "routineIcons": [
+        "mwb-question",
+        "silent-think"
+      ],
+      "conceptsIntroducedHere": [
+        "l2-starter-retrieval"
+      ],
+      "pedagogicalRationale": {
+        "principle": "Spaced Retrieval from Lesson 1",
+        "cognitiveLoadNote": "Locks in Switch/Router distinction before introducing packet headers.",
+        "retrievalLink": "Directly tests Lesson 1 Know-1 and Know-3."
+      }
+    },
+    {
+      "id": "bp-2-0",
+      "slideNumber": 2,
+      "title": "Packet Switching & Routing",
+      "phase": "explanation",
+      "presetId": "lesson-title-page",
+      "allocatedMinutes": 2,
+      "contentSummary": "Lesson topic, date, enquiry hook, and packet switching preview graphic.",
+      "pupilActivity": "Read enquiry hook while copying date and title.",
+      "routineIcons": [
+        "key-vocab"
+      ],
+      "conceptsIntroducedHere": [],
+      "pedagogicalRationale": {
+        "principle": "Lesson Framing & Visual Hook",
+        "cognitiveLoadNote": "Orients pupils with visual preview right after the retrieval starter."
+      }
+    },
+    {
+      "id": "bp-2-2",
+      "slideNumber": 3,
+      "title": "Inside a Data Packet",
+      "phase": "explanation",
+      "presetId": "custom",
+      "allocatedMinutes": 10,
+      "contentSummary": "Bespoke non-template slide dissecting a packet into Header (From/To/Seq), Payload, and Footer (Checksum) alongside the live packet-switching diagram.",
+      "pupilActivity": "Label a blank packet envelope template in exercise books.",
+      "routineIcons": [
+        "key-vocab",
+        "write-in-books"
+      ],
+      "conceptsIntroducedHere": [
+        "packet-header",
+        "payload",
+        "checksum-footer"
+      ],
+      "pedagogicalRationale": {
+        "principle": "Bespoke Dual-Coded Layout",
+        "cognitiveLoadNote": "Places the structural diagram beside the 3 packet anatomy cards so eyes map directly without flipping slides."
+      }
+    },
+    {
+      "id": "bp-2-3",
+      "slideNumber": 4,
+      "title": "Classroom Packet Relay",
+      "phase": "task",
+      "presetId": "active-task-scaffolds",
+      "allocatedMinutes": 22,
+      "contentSummary": "Groups of 5 act as Sender, 3 Routers, and Receiver. Sender splits a 4-word phrase onto 4 slips with sequence numbers and sends via different desk routes while one router is blocked.",
+      "pupilActivity": "Enact routing around a blocked desk, verify sequence numbers, and request resend if a packet drops.",
+      "routineIcons": [
+        "pair-discussion",
+        "independent-task",
+        "extension-challenge"
+      ],
+      "conceptsIntroducedHere": [
+        "dynamic-routing",
+        "reassembly"
+      ],
+      "pedagogicalRationale": {
+        "principle": "Embodied Cognition & Active Inquiry",
+        "cognitiveLoadNote": "Physical roles externalise memory steps so every pupil grasps why sequence numbers are essential."
+      }
+    },
+    {
+      "id": "bp-2-4",
+      "slideNumber": 5,
+      "title": "Packet Switching Debrief",
+      "phase": "plenary",
+      "presetId": "plenary-synthesis",
+      "allocatedMinutes": 12,
+      "contentSummary": "Summarise how routers choose uncongested paths and how sequence numbers + checksums guarantee accuracy.",
+      "pupilActivity": "Write 3-step summary explaining packet switching in books.",
+      "routineIcons": [
+        "write-in-books",
+        "mwb-question"
+      ],
+      "conceptsIntroducedHere": [
+        "packet-switching-summary"
+      ],
+      "pedagogicalRationale": {
+        "principle": "Consolidate Simulation into Schema",
+        "cognitiveLoadNote": "Links physical activity immediately to formal GCSE/KS3 terminology."
+      }
+    }
+  ],
+  "slidesData": [
+    {
+      "id": "sl-2-1",
+      "blueprintId": "bp-2-1",
+      "slideNumber": 1,
+      "phase": "starter",
+      "presetId": "mwb-starter-quadrant",
+      "waveVariant": "top-bottom-strata",
+      "title": "Starter",
+      "bodyBlocks": [],
+      "starterQuadrants": [
+        {
+          "id": "q1",
+          "label": "1",
+          "question": "What is the single point of failure in a Star topology?",
+          "options": [
+            "The central Switch",
+            "A single keyboard",
+            "One monitor cable",
+            "The room printer"
+          ],
+          "answer": "A — The central Switch"
+        },
+        {
+          "id": "q2",
+          "label": "2",
+          "question": "Which device routes data between two different networks?",
+          "options": [
+            "Hub",
+            "Router",
+            "Switch",
+            "Repeater"
+          ],
+          "answer": "B — Router"
+        },
+        {
+          "id": "q3",
+          "label": "3",
+          "question": "Why might an emergency service pick a Mesh topology?",
+          "options": [
+            "Uses less cabling",
+            "Only needs one switch",
+            "Slower speeds save power",
+            "Has backup routes if a link fails"
+          ],
+          "answer": "D — Has backup routes if a link fails"
+        },
+        {
+          "id": "q4",
+          "label": "4",
+          "question": "Convert the 4-bit binary number 1011 into denary.",
+          "options": [
+            "9",
+            "10",
+            "11",
+            "13"
+          ],
+          "answer": "C — 11"
+        }
+      ],
+      "routineIcons": [
+        "mwb-question",
+        "silent-think"
+      ],
+      "timerSeconds": 240,
+      "speakerNotes": "Use progressive reveal (Space / Right Arrow) for each quadrant.",
+      "pedagogicalBadges": {
+        "principle": "Rosenshine Principle 1: Spaced Retrieval",
+        "cognitiveLoadNote": "Bridges Lesson 1 hardware directly to Lesson 2 packets."
+      }
+    },
+    {
+      "id": "sl-2-0",
+      "blueprintId": "bp-2-0",
+      "slideNumber": 2,
+      "phase": "explanation",
+      "presetId": "lesson-title-page",
+      "waveVariant": "vertical-scurve-right",
+      "title": "Packet Switching & Routing",
+      "lessonDate": "Thursday, 14 November 2026",
+      "bodyBlocks": [],
+      "mediaItem": {
+        "id": "med-2-0",
+        "type": "svg-diagram",
+        "title": "Full-Bleed Network Cover Scene",
+        "svgCode": "<svg viewBox=\"0 0 1000 1080\" xmlns=\"http://www.w3.org/2000/svg\" font-family=\"Plus Jakarta Sans, sans-serif\">\n  <defs>\n    <radialGradient id=\"ncGlow1\" cx=\"62%\" cy=\"44%\" r=\"52%\">\n      <stop offset=\"0%\" stop-color=\"#10B981\" stop-opacity=\"0.38\"/>\n      <stop offset=\"60%\" stop-color=\"#064E3B\" stop-opacity=\"0.16\"/>\n      <stop offset=\"100%\" stop-color=\"#022C22\" stop-opacity=\"0\"/>\n    </radialGradient>\n    <radialGradient id=\"ncGlow2\" cx=\"42%\" cy=\"74%\" r=\"42%\">\n      <stop offset=\"0%\" stop-color=\"#38BDF8\" stop-opacity=\"0.28\"/>\n      <stop offset=\"100%\" stop-color=\"#022C22\" stop-opacity=\"0\"/>\n    </radialGradient>\n    <linearGradient id=\"ncBg\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"100%\">\n      <stop offset=\"0%\" stop-color=\"#042F2E\"/>\n      <stop offset=\"50%\" stop-color=\"#022C22\"/>\n      <stop offset=\"100%\" stop-color=\"#051F1D\"/>\n    </linearGradient>\n  </defs>\n  <rect width=\"1000\" height=\"1080\" fill=\"url(#ncBg)\"/>\n  <rect width=\"1000\" height=\"1080\" fill=\"url(#ncGlow1)\"/>\n  <rect width=\"1000\" height=\"1080\" fill=\"url(#ncGlow2)\"/>\n  <!-- Subtle perspective grid -->\n  <g stroke=\"#34D399\" stroke-opacity=\"0.08\" stroke-width=\"1.5\">\n    <line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"1080\"/>\n    <line x1=\"280\" y1=\"0\" x2=\"280\" y2=\"1080\"/>\n    <line x1=\"440\" y1=\"0\" x2=\"440\" y2=\"1080\"/>\n    <line x1=\"600\" y1=\"0\" x2=\"600\" y2=\"1080\"/>\n    <line x1=\"760\" y1=\"0\" x2=\"760\" y2=\"1080\"/>\n    <line x1=\"920\" y1=\"0\" x2=\"920\" y2=\"1080\"/>\n    <line x1=\"0\" y1=\"180\" x2=\"1000\" y2=\"180\"/>\n    <line x1=\"0\" y1=\"360\" x2=\"1000\" y2=\"360\"/>\n    <line x1=\"0\" y1=\"540\" x2=\"1000\" y2=\"540\"/>\n    <line x1=\"0\" y1=\"720\" x2=\"1000\" y2=\"720\"/>\n    <line x1=\"0\" y1=\"900\" x2=\"1000\" y2=\"900\"/>\n  </g>\n  <!-- Star + Mesh Optical Trunk Paths -->\n  <g fill=\"none\" stroke-linecap=\"round\">\n    <path d=\"M 330 250 L 590 430 L 840 245\" stroke=\"#34D399\" stroke-width=\"5\" stroke-opacity=\"0.72\"/>\n    <path d=\"M 330 250 L 395 615 L 590 430\" stroke=\"#38BDF8\" stroke-width=\"4.5\" stroke-opacity=\"0.65\"/>\n    <path d=\"M 590 430 L 815 620 L 665 860 L 395 615\" stroke=\"#34D399\" stroke-width=\"5\" stroke-opacity=\"0.75\"/>\n    <path d=\"M 840 245 L 815 620\" stroke=\"#6EE7B7\" stroke-width=\"4\" stroke-dasharray=\"12 10\" stroke-opacity=\"0.6\"/>\n    <path d=\"M 590 430 L 665 860\" stroke=\"#FBBF24\" stroke-width=\"4.5\" stroke-dasharray=\"10 10\" stroke-opacity=\"0.75\"/>\n    <path d=\"M 270 815 L 395 615\" stroke=\"#38BDF8\" stroke-width=\"4\" stroke-opacity=\"0.6\"/>\n    <path d=\"M 270 815 L 665 860\" stroke=\"#34D399\" stroke-width=\"4\" stroke-opacity=\"0.5\"/>\n    <path d=\"M 590 120 L 590 430\" stroke=\"#6EE7B7\" stroke-width=\"3.5\" stroke-opacity=\"0.5\"/>\n    <path d=\"M 590 120 L 840 245\" stroke=\"#38BDF8\" stroke-width=\"3\" stroke-opacity=\"0.45\"/>\n  </g>\n  <!-- Moving Data Packets -->\n  <rect x=\"445\" y=\"325\" width=\"38\" height=\"16\" rx=\"8\" fill=\"#FBBF24\" transform=\"rotate(35 464 333)\"/>\n  <rect x=\"705\" y=\"510\" width=\"38\" height=\"16\" rx=\"8\" fill=\"#38BDF8\" transform=\"rotate(40 724 518)\"/>\n  <rect x=\"495\" y=\"720\" width=\"38\" height=\"16\" rx=\"8\" fill=\"#34D399\" transform=\"rotate(43 514 728)\"/>\n  <!-- Outer Workstation / Router Nodes -->\n  <g>\n    <circle cx=\"330\" cy=\"250\" r=\"46\" fill=\"#065F46\" stroke=\"#6EE7B7\" stroke-width=\"5\"/>\n    <text x=\"330\" y=\"256\" fill=\"#ECFDF5\" font-size=\"22\" font-weight=\"800\" text-anchor=\"middle\">NIC</text>\n    <circle cx=\"840\" cy=\"245\" r=\"44\" fill=\"#0369A1\" stroke=\"#7DD3FC\" stroke-width=\"5\"/>\n    <text x=\"840\" y=\"252\" fill=\"#F0F9FF\" font-size=\"20\" font-weight=\"800\" text-anchor=\"middle\">WAP</text>\n    <circle cx=\"395\" cy=\"615\" r=\"48\" fill=\"#065F46\" stroke=\"#34D399\" stroke-width=\"5\"/>\n    <text x=\"395\" y=\"622\" fill=\"#ECFDF5\" font-size=\"20\" font-weight=\"800\" text-anchor=\"middle\">PC 1</text>\n    <circle cx=\"815\" cy=\"620\" r=\"50\" fill=\"#0C4A6E\" stroke=\"#38BDF8\" stroke-width=\"5\"/>\n    <text x=\"815\" y=\"627\" fill=\"#E0F2FE\" font-size=\"20\" font-weight=\"800\" text-anchor=\"middle\">RTR</text>\n    <circle cx=\"665\" cy=\"860\" r=\"46\" fill=\"#065F46\" stroke=\"#FBBF24\" stroke-width=\"5\"/>\n    <text x=\"665\" y=\"867\" fill=\"#FEF3C7\" font-size=\"20\" font-weight=\"800\" text-anchor=\"middle\">MESH</text>\n    <circle cx=\"270\" cy=\"815\" r=\"36\" fill=\"#042F2E\" stroke=\"#34D399\" stroke-width=\"4\"/>\n    <circle cx=\"590\" cy=\"120\" r=\"34\" fill=\"#042F2E\" stroke=\"#7DD3FC\" stroke-width=\"4\"/>\n  </g>\n  <!-- Central Core Switch Node -->\n  <g>\n    <circle cx=\"590\" cy=\"430\" r=\"88\" fill=\"#10B981\" fill-opacity=\"0.16\"/>\n    <rect x=\"520\" y=\"378\" width=\"140\" height=\"104\" rx=\"24\" fill=\"#059669\" stroke=\"#ECFDF5\" stroke-width=\"5\"/>\n    <text x=\"590\" y=\"424\" fill=\"#FFFFFF\" font-size=\"25\" font-weight=\"800\" text-anchor=\"middle\">SWITCH</text>\n    <text x=\"590\" y=\"454\" fill=\"#A7F3D0\" font-size=\"16\" font-weight=\"700\" text-anchor=\"middle\">1 Gbps LAN</text>\n  </g>\n</svg>",
+        "cropFit": "cover",
+        "frameShape": "clean",
+        "placement": "fill-bottom-layer"
+      },
+      "routineIcons": [],
+      "speakerNotes": "Move into Lesson 2 once starter answers are checked, showing today’s topic and date."
+    },
+    {
+      "id": "sl-2-2",
+      "blueprintId": "bp-2-2",
+      "slideNumber": 3,
+      "phase": "explanation",
+      "presetId": "custom",
+      "waveVariant": "island-cutout-right",
+      "title": "Inside a Data Packet",
+      "bodyBlocks": [],
+      "customCanvasElements": [
+        {
+          "id": "ce-1",
+          "kind": "text-card",
+          "x": 5,
+          "y": 23,
+          "w": 38,
+          "h": 21,
+          "heading": "1. Header",
+          "content": "• Holds Sender IP and Destination IP.\n• Lists Sequence number (e.g. 2 of 3) to rebuild order.",
+          "tone": "creamy",
+          "routineIcon": "write-in-books"
+        },
+        {
+          "id": "ce-2",
+          "kind": "text-card",
+          "x": 5,
+          "y": 47,
+          "w": 38,
+          "h": 20,
+          "heading": "2. Payload",
+          "content": "• Holds the actual chunk of data (~1,500 bytes).\n• Could be part of a photo, video, or message.",
+          "tone": "creamy"
+        },
+        {
+          "id": "ce-3",
+          "kind": "text-card",
+          "x": 5,
+          "y": 70,
+          "w": 38,
+          "h": 21,
+          "heading": "3. Trailer",
+          "content": "• Runs an error check called a Checksum.\n• Asks to resend the packet if bits get corrupted.",
+          "tone": "creamy",
+          "routineIcon": "key-vocab"
+        },
+        {
+          "id": "ce-4",
+          "kind": "diagram",
+          "x": 47,
+          "y": 23,
+          "w": 48,
+          "h": 68,
+          "heading": "Packet Switching",
+          "content": "",
+          "svgCode": "<svg viewBox=\"0 0 640 420\" xmlns=\"http://www.w3.org/2000/svg\" font-family=\"Plus Jakarta Sans, sans-serif\">\n  <rect width=\"640\" height=\"420\" rx=\"24\" fill=\"#FAF6F0\"/>\n  <!-- Links -->\n  <g stroke=\"#94A3B8\" stroke-width=\"4\" stroke-dasharray=\"8 6\" fill=\"none\">\n    <line x1=\"95\" y1=\"210\" x2=\"230\" y2=\"105\"/>\n    <line x1=\"95\" y1=\"210\" x2=\"230\" y2=\"315\"/>\n    <line x1=\"230\" y1=\"105\" x2=\"410\" y2=\"105\"/>\n    <line x1=\"230\" y1=\"105\" x2=\"410\" y2=\"315\"/>\n    <line x1=\"230\" y1=\"315\" x2=\"410\" y2=\"105\"/>\n    <line x1=\"230\" y1=\"315\" x2=\"410\" y2=\"315\"/>\n    <line x1=\"410\" y1=\"105\" x2=\"545\" y2=\"210\"/>\n    <line x1=\"410\" y1=\"315\" x2=\"545\" y2=\"210\"/>\n  </g>\n  <!-- Highlighted Routes -->\n  <path d=\"M95 210 L230 105 L410 105 L545 210\" stroke=\"#059669\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/>\n  <path d=\"M95 210 L230 315 L410 315 L545 210\" stroke=\"#0284C7\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/>\n  <!-- Routers -->\n  <g fill=\"#065F46\" stroke=\"#FAF6F0\" stroke-width=\"3\">\n    <circle cx=\"230\" cy=\"105\" r=\"28\"/>\n    <circle cx=\"230\" cy=\"315\" r=\"28\"/>\n    <circle cx=\"410\" cy=\"105\" r=\"28\"/>\n    <circle cx=\"410\" cy=\"315\" r=\"28\"/>\n  </g>\n  <g fill=\"#FAF6F0\" font-size=\"13\" font-weight=\"700\" text-anchor=\"middle\">\n    <text x=\"230\" y=\"110\">R1</text>\n    <text x=\"230\" y=\"320\">R2</text>\n    <text x=\"410\" y=\"110\">R3</text>\n    <text x=\"410\" y=\"320\">R4</text>\n  </g>\n  <!-- Sender & Receiver -->\n  <rect x=\"35\" y=\"170\" width=\"90\" height=\"80\" rx=\"14\" fill=\"#0F172A\"/>\n  <text x=\"80\" y=\"206\" fill=\"#FAF6F0\" font-size=\"13\" font-weight=\"700\" text-anchor=\"middle\">SENDER</text>\n  <text x=\"80\" y=\"226\" fill=\"#38BDF8\" font-size=\"11\" font-weight=\"600\" text-anchor=\"middle\">192.168.1.4</text>\n\n  <rect x=\"515\" y=\"170\" width=\"95\" height=\"80\" rx=\"14\" fill=\"#0F172A\"/>\n  <text x=\"562\" y=\"206\" fill=\"#FAF6F0\" font-size=\"13\" font-weight=\"700\" text-anchor=\"middle\">RECEIVER</text>\n  <text x=\"562\" y=\"226\" fill=\"#34D399\" font-size=\"11\" font-weight=\"600\" text-anchor=\"middle\">Reassembles</text>\n\n  <!-- Packets -->\n  <g transform=\"translate(275, 55)\">\n    <rect width=\"88\" height=\"34\" rx=\"8\" fill=\"#10B981\"/>\n    <text x=\"44\" y=\"22\" fill=\"#FFFFFF\" font-size=\"12\" font-weight=\"700\" text-anchor=\"middle\">Packet 1/3</text>\n  </g>\n  <g transform=\"translate(275, 330)\">\n    <rect width=\"88\" height=\"34\" rx=\"8\" fill=\"#0EA5E9\"/>\n    <text x=\"44\" y=\"22\" fill=\"#FFFFFF\" font-size=\"12\" font-weight=\"700\" text-anchor=\"middle\">Packet 2/3</text>\n  </g>\n  <g transform=\"translate(135, 255)\">\n    <rect width=\"88\" height=\"34\" rx=\"8\" fill=\"#F59E0B\"/>\n    <text x=\"44\" y=\"22\" fill=\"#FFFFFF\" font-size=\"12\" font-weight=\"700\" text-anchor=\"middle\">Packet 3/3</text>\n  </g>\n  <text x=\"320\" y=\"396\" fill=\"#475569\" font-size=\"13\" font-weight=\"600\" text-anchor=\"middle\">Each packet carries Header (To/From/Seq #) + Payload + Error Check</text>\n</svg>",
+          "tone": "creamy"
+        }
+      ],
+      "routineIcons": [
+        "key-vocab",
+        "write-in-books"
+      ],
+      "speakerNotes": "This bespoke layout demonstrates the AI Custom Slide Designer output: custom-positioned structural cards paired directly beside the Packet Switching vector diagram.",
+      "pedagogicalBadges": {
+        "principle": "Spatial Contiguity (CLT)",
+        "cognitiveLoadNote": "Bespoke layout puts Header/Payload/Footer right beside the animated router paths."
+      }
+    },
+    {
+      "id": "sl-2-3",
+      "blueprintId": "bp-2-3",
+      "slideNumber": 4,
+      "phase": "task",
+      "presetId": "active-task-scaffolds",
+      "waveVariant": "corner-cavern-br",
+      "title": "Unplugged Packet Relay",
+      "bodyBlocks": [
+        {
+          "id": "b-2-3-1",
+          "heading": "1. Split & Address",
+          "dualCodeIcon": "data",
+          "content": "• Write a 4-word message across 4 slips.\n• Add To, From, Sequence (1/4–4/4), and a letter-count Checksum.",
+          "style": "step",
+          "routineIcon": "pair-discussion"
+        },
+        {
+          "id": "b-2-3-2",
+          "heading": "2. Route Around Failure",
+          "dualCodeIcon": "network",
+          "content": "• Send packets 10 seconds apart across different desks.\n• Switch paths if a desk is marked offline.",
+          "style": "step",
+          "routineIcon": "independent-task"
+        },
+        {
+          "id": "b-2-3-3",
+          "heading": "3. Reassemble & Check",
+          "dualCodeIcon": "check",
+          "content": "• Receiver sorts slips 1 to 4 and checks letter counts.\n• Send a \"Resend\" slip back if any packet is wrong.",
+          "style": "step",
+          "routineIcon": "extension-challenge"
+        }
+      ],
+      "routineIcons": [
+        "pair-discussion",
+        "independent-task",
+        "extension-challenge"
+      ],
+      "timerSeconds": 660,
+      "speakerNotes": "Playful active task! Intentionally intercept Packet 2 from one group and secretly change a letter to test if the Receiver catches the checksum mismatch.",
+      "pedagogicalBadges": {
+        "principle": "Embodied Unplugged Computing",
+        "cognitiveLoadNote": "Physical roleplay embeds sequence numbers & checksums far better than passive copying."
+      }
+    },
+    {
+      "id": "sl-2-4",
+      "blueprintId": "bp-2-4",
+      "slideNumber": 5,
+      "phase": "plenary",
+      "presetId": "plenary-synthesis",
+      "waveVariant": "diagonal-surge",
+      "title": "Why Packet Switching Works",
+      "bodyBlocks": [
+        {
+          "id": "b-2-4-1",
+          "heading": "In Your Books",
+          "content": "• Why do packets sometimes arrive out of order?\n• Which part of the packet fixes the order?\n• What happens if one packet arrives corrupted?",
+          "style": "plain",
+          "routineIcon": "write-in-books"
+        }
+      ],
+      "routineIcons": [
+        "write-in-books",
+        "mwb-question"
+      ],
+      "timerSeconds": 240,
+      "speakerNotes": "Cold-call pupils using no-hands-up for questions 1-3 before dismissing.",
+      "pedagogicalBadges": {
+        "principle": "Retrieval Consolidation",
+        "cognitiveLoadNote": "Translates unplugged activity into durable written schema."
+      }
+    }
+  ]
+}

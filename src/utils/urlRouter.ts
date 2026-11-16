@@ -6,16 +6,26 @@ export interface ParsedLessonLink {
   stage?: number;
   slideIndex?: number;
   portableLesson?: PlannedLesson | null;
+  loadUrl?: string;
+  loadTomorrow?: boolean;
   present?: boolean;
 }
 
 /**
- * Safely encode a lesson payload into a portable Base64 URL string
+ * Safely encode a lesson payload into a portable Base64 URL string.
+ * Uses UTF-8 byte encoding and URL-safe characters (- and _) to prevent corruption in URL hashes.
  */
 export function encodeLessonData(lesson: PlannedLesson): string {
   try {
     const json = JSON.stringify(lesson);
-    return btoa(unescape(encodeURIComponent(json)));
+    const bytes = new TextEncoder().encode(json);
+    let binStr = '';
+    const len = bytes.length;
+    for (let i = 0; i < len; i++) {
+      binStr += String.fromCharCode(bytes[i]);
+    }
+    const b64 = btoa(binStr);
+    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   } catch (err) {
     console.error('Failed to encode lesson data for link', err);
     return '';
@@ -23,20 +33,66 @@ export function encodeLessonData(lesson: PlannedLesson): string {
 }
 
 /**
- * Safely decode a lesson payload from a portable Base64 URL string
+ * Safely decode a lesson payload from a portable Base64 URL string.
+ * Handles URL-safe characters, URLSearchParams space replacements, and restores padding.
  */
 export function decodeLessonData(raw: string): PlannedLesson | null {
   try {
-    const json = decodeURIComponent(escape(atob(raw)));
+    // 1. Restore standard base64 characters from URL-safe variants
+    let b64 = raw.replace(/-/g, '+').replace(/_/g, '/').replace(/ /g, '+');
+    // 2. Restore padding
+    while (b64.length % 4 !== 0) {
+      b64 += '=';
+    }
+    // 3. Decode binary string to Uint8Array
+    const binStr = atob(b64);
+    const bytes = new Uint8Array(binStr.length);
+    for (let i = 0; i < binStr.length; i++) {
+      bytes[i] = binStr.charCodeAt(i);
+    }
+    // 4. Decode UTF-8 string
+    const json = new TextDecoder().decode(bytes);
     const parsed = JSON.parse(json) as PlannedLesson;
     if (parsed && parsed.title && Array.isArray(parsed.slidesData)) {
       return parsed;
     }
     return null;
   } catch (err) {
+    // Fallback: try legacy unescape/decodeURIComponent format
+    try {
+      const fixed = raw.replace(/ /g, '+');
+      const json = decodeURIComponent(escape(atob(fixed)));
+      const parsed = JSON.parse(json) as PlannedLesson;
+      if (parsed && parsed.title && Array.isArray(parsed.slidesData)) {
+        return parsed;
+      }
+    } catch {
+      // ignore secondary failure
+    }
     console.warn('Could not decode portable lesson payload from URL', err);
     return null;
   }
+}
+
+/**
+ * Download a PlannedLesson object as a formatted .lesson.json file
+ */
+export function downloadLessonJsonFile(lesson: PlannedLesson): void {
+  const json = JSON.stringify(lesson, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const safeTitle = (lesson.title || 'lesson')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .slice(0, 30);
+  a.download = `Lesson-${lesson.lessonNumber || 1}-${safeTitle}.lesson.json`;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 /**
@@ -102,6 +158,17 @@ export function parseLessonLink(): ParsedLessonLink {
   const presentParam = getParam('present');
   if (presentParam === 'true' || presentParam === '1') {
     result.present = true;
+  }
+
+  const loadParam = getParam('load') || getParam('url') || getParam('src');
+  if (loadParam) {
+    result.loadUrl = loadParam.trim();
+    if (!result.stage) result.stage = 4;
+  }
+
+  if (result.lessonId === 'tomorrow' || result.lessonId === 'custom') {
+    result.loadTomorrow = true;
+    if (!result.stage) result.stage = 4;
   }
 
   const dataParam = getParam('data');

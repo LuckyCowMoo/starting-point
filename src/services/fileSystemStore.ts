@@ -228,6 +228,46 @@ export async function importWorkspaceFromFile(file: File): Promise<CurriculumWor
         sequences: [single],
       };
     }
+    if (parsed.title && Array.isArray(parsed.slidesData)) {
+      // Single lesson JSON import
+      const singleLesson = parsed as any;
+      const sequence: LessonSequence = {
+        id: `seq-imported-${Date.now()}`,
+        folderId: 'imported-folder',
+        title: singleLesson.title,
+        keyStage: 'Secondary',
+        subject: 'General',
+        lessonCount: 1,
+        defaultLessonMinutes: 60,
+        topicBrief: singleLesson.summary || singleLesson.title,
+        updatedAt: new Date().toISOString(),
+        objectives: {
+          know: [],
+          understand: [],
+          do: [],
+          keyVocabulary: [],
+          misconceptions: [],
+          prerequisiteKnowledge: [],
+          pedagogicalSummary: '',
+        },
+        stage1Approved: true,
+        stage2Approved: true,
+        lessons: [singleLesson],
+      };
+      return {
+        folders: [
+          {
+            id: 'imported-folder',
+            name: 'Imported Lessons',
+            keyStage: 'Secondary',
+            subject: 'General',
+            color: '#059669',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        sequences: [sequence],
+      };
+    }
     throw new Error('Unrecognised JSON curriculum format.');
   }
 

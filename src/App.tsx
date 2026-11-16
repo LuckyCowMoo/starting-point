@@ -76,16 +76,84 @@ export function App() {
   };
 
   useEffect(() => {
-    void loadWorkspace().then((loaded) => {
-      let activeWs = loaded;
+    const initApp = async () => {
+      let activeWs = await loadWorkspace();
       let restoredSeqId: string | null = null;
       let restoredLessonId: string | null = null;
       let restoredStage: StageId | null = null;
 
-      // 1. Check for incoming URL deep-link or portable payload first (#lesson=... or #data=...)
+      // 1. Check for incoming URL deep-link or portable payload first (#lesson=... or #data=... or #load=...)
       const link = parseLessonLink();
 
-      if (link.portableLesson) {
+      // Check for remote load URL
+      if (link.loadUrl) {
+        try {
+          const res = await fetch(link.loadUrl);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.title && Array.isArray(data.slidesData)) {
+              const remoteLesson = data as PlannedLesson;
+              const targetSeq = activeWs.sequences[0];
+              if (targetSeq) {
+                const exists = targetSeq.lessons.some((l) => l.id === remoteLesson.id);
+                const updatedLessons = exists
+                  ? targetSeq.lessons.map((l) => (l.id === remoteLesson.id ? remoteLesson : l))
+                  : [remoteLesson, ...targetSeq.lessons];
+                activeWs = {
+                  ...activeWs,
+                  sequences: activeWs.sequences.map((s) =>
+                    s.id === targetSeq.id ? { ...s, lessons: updatedLessons } : s
+                  ),
+                };
+                restoredSeqId = targetSeq.id;
+                restoredLessonId = remoteLesson.id;
+                restoredStage = 4;
+                showToast(`Loaded remote lesson: "${remoteLesson.title}"`);
+              }
+            } else if (data.folders && data.sequences) {
+              activeWs = data as CurriculumWorkspace;
+              restoredSeqId = activeWs.sequences[0]?.id || null;
+              restoredLessonId = activeWs.sequences[0]?.lessons[0]?.id || null;
+              restoredStage = 4;
+              showToast('Loaded remote workspace!');
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to load remote URL:', err);
+        }
+      } else if (link.loadTomorrow) {
+        // Automatically fetch tomorrow's lesson from public lessons
+        try {
+          const res = await fetch('lessons/tomorrow.json');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.title && Array.isArray(data.slidesData)) {
+              const tomorrowLesson = data as PlannedLesson;
+              const targetSeq = activeWs.sequences[0];
+              if (targetSeq) {
+                const exists = targetSeq.lessons.some((l) => l.id === tomorrowLesson.id);
+                const updatedLessons = exists
+                  ? targetSeq.lessons.map((l) => (l.id === tomorrowLesson.id ? tomorrowLesson : l))
+                  : [tomorrowLesson, ...targetSeq.lessons];
+                activeWs = {
+                  ...activeWs,
+                  sequences: activeWs.sequences.map((s) =>
+                    s.id === targetSeq.id ? { ...s, lessons: updatedLessons } : s
+                  ),
+                };
+                restoredSeqId = targetSeq.id;
+                restoredLessonId = tomorrowLesson.id;
+                restoredStage = 4;
+                showToast(`Loaded lesson: "${tomorrowLesson.title}"`);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to load tomorrow.json:', err);
+        }
+      }
+
+      if (link.portableLesson && !restoredLessonId) {
         // Import or merge portable lesson into the primary sequence
         const existingSeq = activeWs.sequences[0];
         if (existingSeq) {
@@ -105,7 +173,7 @@ export function App() {
           if (link.slideIndex !== undefined) setUrlSlideIdx(link.slideIndex);
           showToast(`Opened shared lesson: "${link.portableLesson.title}"`);
         }
-      } else if (link.lessonId || link.lessonNumber !== undefined) {
+      } else if ((link.lessonId || link.lessonNumber !== undefined) && !restoredLessonId) {
         // Find matching sequence and lesson
         for (const seq of activeWs.sequences) {
           const found = seq.lessons.find(
@@ -173,7 +241,8 @@ export function App() {
         setActiveStage(restoredStage);
       }
       setHydrated(true);
-    });
+    };
+    void initApp();
   }, []);
 
   // Listen to browser hash changes (e.g. user pastes new #lesson=... link or hits back/forward)
@@ -415,6 +484,34 @@ export function App() {
 
   const handleImportArchive = async (file: File) => {
     try {
+      if (file.name.endsWith('.json')) {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        if (parsed.title && Array.isArray(parsed.slidesData)) {
+          const singleLesson = parsed as PlannedLesson;
+          const currentSeq =
+            workspace.sequences.find((s) => s.id === activeSequenceId) ||
+            workspace.sequences[0];
+          if (currentSeq) {
+            const exists = currentSeq.lessons.some((l) => l.id === singleLesson.id);
+            const updatedLessons = exists
+              ? currentSeq.lessons.map((l) => (l.id === singleLesson.id ? singleLesson : l))
+              : [...currentSeq.lessons, singleLesson];
+            const updatedWs: CurriculumWorkspace = {
+              ...workspace,
+              sequences: workspace.sequences.map((s) =>
+                s.id === currentSeq.id ? { ...s, lessons: updatedLessons } : s
+              ),
+            };
+            setWorkspace(updatedWs);
+            setActiveSequenceId(currentSeq.id);
+            setActiveLessonId(singleLesson.id);
+            setActiveStage(4);
+            showToast(`Loaded lesson "${singleLesson.title}"!`);
+            return;
+          }
+        }
+      }
       const imported = await importWorkspaceFromFile(file);
       setWorkspace(imported);
       if (imported.sequences[0]) {

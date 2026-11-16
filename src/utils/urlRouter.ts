@@ -64,11 +64,20 @@ export function parseLessonLink(): ParsedLessonLink {
 
   const lessonParam = getParam('lesson');
   if (lessonParam) {
-    const asNum = parseInt(lessonParam, 10);
-    if (!isNaN(asNum) && String(asNum) === lessonParam.trim()) {
+    const trimmed = lessonParam.trim();
+    result.lessonId = trimmed;
+
+    // Direct number e.g. "2"
+    const asNum = parseInt(trimmed, 10);
+    if (!isNaN(asNum) && String(asNum) === trimmed) {
       result.lessonNumber = asNum;
+    } else {
+      // Extract number from patterns like "lesson-2", "lesson2", "l-2", "l2", "lesson-net-2"
+      const matchNum = trimmed.match(/(?:lesson|l)[-_]?(?:[a-z]+[-_])?(\d+)/i) || trimmed.match(/(\d+)$/);
+      if (matchNum && matchNum[1]) {
+        result.lessonNumber = parseInt(matchNum[1], 10);
+      }
     }
-    result.lessonId = lessonParam.trim();
   }
 
   const stageParam = getParam('stage');

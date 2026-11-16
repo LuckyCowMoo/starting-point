@@ -187,7 +187,14 @@ export function App() {
         const found = seq.lessons.find(
           (l) =>
             (link.lessonId && l.id === link.lessonId) ||
-            (link.lessonNumber !== undefined && l.lessonNumber === link.lessonNumber)
+            (link.lessonNumber !== undefined && l.lessonNumber === link.lessonNumber) ||
+            (link.lessonId && l.id.endsWith(link.lessonId)) ||
+            (link.lessonId && link.lessonId.endsWith(l.id)) ||
+            (link.lessonId &&
+              l.title
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .includes(link.lessonId.toLowerCase()))
         );
         if (found) {
           setActiveSequenceId(seq.id);

@@ -1908,7 +1908,9 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
     const onDark = effectiveLayer === 'bottom' ? bottomOnDark : topOnDark;
     const isCode = b.style === 'code';
     const isBoxed =
-      override?.boxed !== undefined ? override.boxed : b.style === 'boxed';
+      override?.boxed !== undefined
+        ? override.boxed
+        : b.style === 'boxed' || b.style === 'card' || isTimeline;
     const isHighlight = !isBoxed && (b.style === 'highlight' || b.style === 'challenge');
     const showStepBadge = isTimeline || b.style === 'step';
 
@@ -1921,7 +1923,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
       ? `rounded-3xl p-7 transition-all border-2 shadow-lg ${
           onDark
             ? 'bg-white/14 backdrop-blur-md border-white/30'
-            : 'bg-white/95 backdrop-blur-xs'
+            : 'bg-white/95 backdrop-blur-xs border-slate-200/90'
         }`
       : isCode
       ? 'rounded-2xl p-6 bg-zinc-950 text-emerald-300 font-mono border border-zinc-800 shadow-lg'
@@ -2112,7 +2114,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 ? `rounded-3xl px-7 py-3.5 border-2 shadow-lg ${
                     titleOnDark
                       ? 'bg-white/14 backdrop-blur-md border-white/30'
-                      : 'bg-white/95'
+                      : 'bg-white/95 border-slate-200/90'
                   }`
                 : hideWaveBackground
                 ? 'rounded-2xl px-4 py-1.5 border-2 border-dashed border-slate-300 bg-white/55'
@@ -2259,7 +2261,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                   className={
                     dateBoxed
                       ? `inline-flex items-center gap-3 px-6 py-2.5 rounded-full text-[27px] font-bold border-2 shadow-sm ${
-                          dateOnDark ? 'bg-white/15 text-white border-white/30' : 'bg-white'
+                          dateOnDark ? 'bg-white/15 text-white border-white/30' : 'bg-white border-slate-200/90'
                         }`
                       : hideWaveBackground
                       ? 'inline-flex items-center gap-3 px-5 py-2 rounded-full text-[27px] font-bold border-2 border-dashed border-slate-300 bg-white/60'
@@ -2315,7 +2317,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                     ? `rounded-3xl p-6 border-2 shadow-lg ${
                         titleOnDark
                           ? 'bg-white/14 backdrop-blur-md border-white/30'
-                          : 'bg-white/95'
+                          : 'bg-white/95 border-slate-200/90'
                       }`
                     : hideWaveBackground
                     ? 'rounded-2xl p-4 border-2 border-dashed border-slate-300 bg-white/55'
@@ -2361,7 +2363,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                       ? `p-8 rounded-3xl border-2 shadow-lg ${
                           bigQOnDark
                             ? 'bg-white/14 backdrop-blur-md border-white/30'
-                            : 'bg-white/95'
+                            : 'bg-white/95 border-slate-200/90'
                         }`
                       : hideWaveBackground
                       ? 'p-6 rounded-2xl border-2 border-dashed border-slate-300 bg-white/65'
@@ -2929,7 +2931,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                       ? `rounded-3xl border-2 px-6 py-4 shadow-md ${
                           quadOnDark
                             ? 'bg-white/14 backdrop-blur-md border-white/30'
-                            : 'bg-white/95'
+                            : 'bg-white/95 border-slate-200/90'
                         }`
                       : hideWaveBackground
                       ? 'rounded-2xl border-2 border-dashed border-slate-300 px-5 py-3.5 bg-white/60'
@@ -3010,7 +3012,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                     ? `rounded-3xl p-6 border-2 shadow-lg ${
                         titleOnDark
                           ? 'bg-white/14 backdrop-blur-md border-white/30'
-                          : 'bg-white/95'
+                          : 'bg-white/95 border-slate-200/90'
                       }`
                     : hideWaveBackground
                     ? 'rounded-2xl p-4 border-2 border-dashed border-slate-300 bg-white/55'
@@ -3056,7 +3058,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                       ? `p-8 rounded-3xl border-2 shadow-md ${
                           bigQOnDark
                             ? 'bg-white/14 backdrop-blur-md border-white/30'
-                            : 'bg-white/92'
+                            : 'bg-white/92 border-slate-200/90'
                         }`
                       : hideWaveBackground
                       ? 'p-6 rounded-2xl border-2 border-dashed border-slate-300 bg-white/65'
@@ -3118,7 +3120,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                     className={
                       termBoxed
                         ? `rounded-3xl border-2 p-6 shadow-md ${
-                            termOnDark ? 'bg-white/15 border-white/30' : 'bg-white/95'
+                            termOnDark ? 'bg-white/15 border-white/30' : 'bg-white/95 border-slate-200/90'
                           }`
                         : hideWaveBackground
                         ? 'rounded-2xl border-2 border-dashed border-slate-300 p-5 bg-white/60'
@@ -3664,7 +3666,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               return (
                 <div
                   key={idx}
-                  className="rounded-3xl p-6 border-2 shadow-sm transition-all"
+                  className="rounded-3xl p-6 border-2 border-slate-200/90 shadow-sm transition-all"
                   style={{
                     backgroundColor: topOnDark
                       ? 'rgba(255,255,255,0.14)'
@@ -3975,7 +3977,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
               hideWaveBackground
                 ? 'rounded-2xl border-2 border-dashed border-sky-400 bg-sky-50/70'
                 : isBoxed
-                ? 'rounded-3xl bg-white/95 border-2 shadow-lg'
+                ? 'rounded-3xl bg-white/95 border-2 border-slate-200/90 shadow-lg'
                 : 'rounded-3xl bg-white/92 shadow-md'
             }`}
             style={
@@ -4002,7 +4004,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 ? `rounded-3xl p-6 border-2 shadow-lg ${
                     onDark
                       ? 'bg-white/14 backdrop-blur-md border-white/30'
-                      : 'bg-white/95'
+                      : 'bg-white/95 border-slate-200/90'
                   }`
                 : hideWaveBackground
                 ? 'rounded-2xl p-5 border-2 border-dashed border-slate-300 bg-white/65'

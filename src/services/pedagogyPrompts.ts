@@ -386,7 +386,14 @@ export function buildStage3BlueprintPrompt(
   const scopeInstruction = targetSlideNumber
     ? `SURGICAL SLIDE BLUEPRINT REVISION: Revise ONLY Slide ${targetSlideNumber} based on teacher feedback: "${feedback}". Preserve all other slides unless minor timing rebalancing is essential to keep the sum near ${budget} minutes.`
     : feedback
-    ? `Revise this lesson's slide-by-slide blueprint based on teacher feedback: "${feedback}".`
+    ? `PRESERVATION & STRUCTURAL REVISION BASED ON TEACHER FEEDBACK: "${feedback}".
+CRITICAL PRESERVATION & SLIDE INSERTION RULES:
+1. STRICT PRESERVATION: Do NOT restart or regenerate existing slides from scratch. All existing slides in CURRENT BLUEPRINT and their content/structure must be PRESERVED untouched unless the feedback explicitly asks to modify or remove them.
+2. INSERTION & POSITIONING: If the teacher asks to add or insert slides (e.g. "add 2 slides for [topic] at position [Y]", "insert after slide [K]", "add a slide between slides 3 and 4"):
+   - Keep all existing slides in their current order.
+   - Design and insert the requested new slide(s) at the exact designated position/index.
+   - Renumber all subsequent slides sequentially (slideNumber: 1, 2, 3...) so the final array is ordered and continuous.
+3. OUTPUT: Return the COMPLETE valid "slidesBlueprint" array containing both the preserved slides and any newly inserted/modified slides.`
     : `Create a Rosenshine-aligned slide-by-slide blueprint for Lesson ${lesson.lessonNumber}. Slide 1 MUST be preset "mwb-starter-quadrant" (phase: "starter", title: "Starter", ~4–5 mins) retrieving strictly from previously taught topics, and Slide 2 MUST be preset "lesson-title-page" (phase: "explanation", ~1–2 mins). Total allocatedMinutes MUST equal ~${budget} minutes (85% of this lesson's ${lesson.durationMinutes} minutes). Use ${recommendedSlideMin} to ${recommendedSlideMax} crisp, single-job slides: hook with an everyday analogy before abstract theory, model single-element cases before combined worked examples, vary question formats (True/False + "Why?", match-ups, ordering, cloze with word bank, spot-the-error), cap tasks at MAX 10 minutes each, and pair EVERY check and practice slide with an immediately following Answer-Reveal slide (1 min) rather than saving answers for the end—OR use fewer compact slides if the Teacher Brief explicitly requests an extended practical/workshop lesson.`;
 
   return `
@@ -643,6 +650,80 @@ CRITICAL FOR SVG / HTML: Inside any "svgCode", inline SVG, or HTML attribute str
       "content": "• Direct second-person pupil point 1\\n• Short point 2",
       "svgCode": "",
       "tone": "creamy"
+    }
+  ]
+}
+\`\`\`
+`.trim();
+}
+
+export function buildStage4InsertSlidesPrompt(
+  seq: LessonSequence,
+  lesson: PlannedLesson,
+  instruction: string,
+  targetPosition?: number
+): string {
+  const existingSlidesSummary = lesson.slidesData
+    .map(
+      (s, idx) =>
+        `Slide ${idx + 1} [${s.phase}] "${s.title}" (${s.presetId}): ${
+          s.richLines?.map((l) => l.text).slice(0, 3).join(' / ') ||
+          s.bodyBlocks.map((b) => b.content).slice(0, 2).join(' / ')
+        }`
+    )
+    .join('\n');
+
+  return `
+${STAGE4_SLIDE_DESIGN_SYSTEM_PROMPT}
+
+ROLE: CLASSROOM SLIDE DESIGNER — TARGETED SLIDE INSERTION
+TASK: The teacher wants to add or insert new slide(s) into Lesson ${lesson.lessonNumber}'s slide deck based on this request:
+"${instruction}"
+
+${targetPosition !== undefined ? `EXPLICIT TARGET POSITION: Insert after Slide ${targetPosition} (position ${targetPosition + 1}).` : ''}
+
+CURRENT EXISTING SLIDES IN THIS DECK (DO NOT REGENERATE OR TOUCH THESE — THEY ARE PRESERVED UNTOUCHED):
+${existingSlidesSummary}
+
+SEQUENCE & LESSON CONTEXT:
+- Subject & Key Stage: ${seq.subject} • ${seq.keyStage}
+- Lesson ${lesson.lessonNumber}: ${lesson.title} (${lesson.durationMinutes} mins)
+- Lesson Summary: ${lesson.summary}
+
+INSTRUCTIONS:
+1. Generate ONLY the new slide(s) requested by the teacher (e.g. if the teacher asks for 2 slides, return an array of 2 slides).
+2. Follow all Classroom Slide Rules:
+   - Direct second-person pupil voice ("Imagine you...", "Look at...")
+   - 25-45 words max per slide
+   - Concrete analogy before theory
+   - Unified "richLines" format where each line has a style ("title", "heading-1", "heading-2", "heading-3", "normal", "callout", "code")
+   - Also provide "unifiedText" and legacy "bodyBlocks"
+3. In your JSON response, include "insertAfterSlideNumber" (e.g., 3 means insert after Slide 3; 0 means insert at the beginning). If the teacher says "at position 4", "insertAfterSlideNumber" is 3.
+
+Return ONLY valid JSON wrapped inside a single \`\`\`json \`\`\` code block:
+\`\`\`json
+{
+  "insertAfterSlideNumber": ${targetPosition ?? 3},
+  "newSlides": [
+    {
+      "title": "Concise Pupil-Facing Title (<= 5 words)",
+      "phase": "explanation",
+      "presetId": "split-concept-dual-code",
+      "waveVariant": "corner-cavern-tr",
+      "richLines": [
+        { "text": "Slide Title", "style": "title" },
+        { "text": "Subheading or Section Focus", "style": "heading-2" },
+        { "text": "• First crisp second-person explanation point", "style": "normal" },
+        { "text": "• Second key point with concrete analogy", "style": "normal" },
+        { "text": "Key point: Punchy sentence locking in the core takeaway.", "style": "callout" }
+      ],
+      "unifiedText": "Slide Title\\n## Subheading or Section Focus\\n• First crisp second-person explanation point\\n• Second key point with concrete analogy\\nKey point: Punchy sentence locking in the core takeaway.",
+      "bodyBlocks": [
+        { "id": "b1", "heading": "", "content": "• First crisp second-person explanation point\\n• Second key point with concrete analogy", "style": "plain", "layer": "top" },
+        { "id": "b2", "heading": "Key point", "content": "Punchy sentence locking in the core takeaway.", "style": "highlight", "layer": "top" }
+      ],
+      "routineIcons": ["write-in-books"],
+      "speakerNotes": "Teacher guidance..."
     }
   ]
 }

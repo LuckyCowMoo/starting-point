@@ -8,6 +8,7 @@ import {
   SequenceObjectives,
   SlideBlueprint,
   SlideData,
+  SlidePresetId,
 } from '../types/curriculum';
 import { PHASE_PALETTES, SLIDE_PRESETS } from '../data/palettes';
 import {
@@ -20,6 +21,7 @@ import {
   buildStage1Prompt,
   buildStage2Prompt,
   buildStage3BlueprintPrompt,
+  buildStage4InsertSlidesPrompt,
   buildStage4SlidesPrompt,
 } from './pedagogyPrompts';
 
@@ -162,7 +164,11 @@ export async function runStage3BlueprintGeneration(
   });
 
   return (res.slidesBlueprint || []).map((bp, idx) => {
-    const existing = lesson.slidesBlueprint[idx];
+    const existing =
+      lesson.slidesBlueprint.find((b) => b.id === bp.id) ||
+      lesson.slidesBlueprint.find(
+        (b) => b.title.trim().toLowerCase() === bp.title?.trim().toLowerCase()
+      );
     return {
       id: existing?.id || `bp-${lesson.lessonNumber}-${idx + 1}-${Date.now()}`,
       slideNumber: bp.slideNumber ?? idx + 1,
@@ -589,6 +595,115 @@ export function parseStage4SlidesResponse(
     );
   }
   return normalizedIncoming;
+}
+
+export function parseStage4InsertSlidesResponse(
+  rawText: string,
+  lesson: PlannedLesson,
+  fallbackInsertAfter?: number
+): { insertAfter: number; newSlides: SlideData[] } {
+  const res = extractJsonFromLlmResponse<any>(rawText);
+  const rawList: any[] = Array.isArray(res)
+    ? res
+    : res.newSlides || res.slides || res.slidesData || [];
+
+  if (rawList.length === 0) {
+    throw new Error('JSON did not contain any new slides in "newSlides" or "slides" array.');
+  }
+
+  let insertAfter = fallbackInsertAfter ?? lesson.slidesData.length;
+  if (typeof res.insertAfterSlideNumber === 'number') {
+    insertAfter = res.insertAfterSlideNumber;
+  } else if (typeof res.insertAtPosition === 'number') {
+    insertAfter = Math.max(0, res.insertAtPosition - 1);
+  }
+
+  const normalizedNewSlides: SlideData[] = rawList.map((s, idx) => {
+    const phase: LessonPhase = s.phase || 'explanation';
+    const presetId: SlidePresetId = s.presetId || 'split-concept-dual-code';
+    const preset = SLIDE_PRESETS.find((p) => p.id === presetId);
+    const waveVariant = s.waveVariant || preset?.recommendedWave || 'corner-cavern-tr';
+
+    const derivedTitle =
+      s.title ||
+      s.richLines?.find((l: any) => l.style === 'title')?.text ||
+      s.richLines?.[0]?.text ||
+      `New Slide ${idx + 1}`;
+
+    const effectiveBlocks =
+      s.bodyBlocks && s.bodyBlocks.length > 0
+        ? s.bodyBlocks
+        : s.richLines && s.richLines.length > 0
+        ? convertRichLinesToBodyBlocks(s.richLines)
+        : [];
+
+    const effectiveRichLines =
+      s.richLines && s.richLines.length > 0
+        ? s.richLines
+        : getSlideRichLines({
+            ...s,
+            title: derivedTitle,
+            bodyBlocks: effectiveBlocks,
+          } as SlideData);
+
+    const effectiveUnified =
+      s.unifiedText || richLinesToUnifiedText(effectiveRichLines);
+
+    return {
+      id: `sl-${lesson.lessonNumber}-new-${Date.now()}-${idx + 1}`,
+      blueprintId: `bp-${lesson.lessonNumber}-new-${Date.now()}-${idx + 1}`,
+      slideNumber: insertAfter + idx + 1,
+      phase,
+      presetId,
+      waveVariant,
+      invertWaveLayers: s.invertWaveLayers,
+      title: derivedTitle,
+      lessonDate: s.lessonDate,
+      bigQuestion: s.bigQuestion,
+      bodyBlocks: effectiveBlocks,
+      richLines: effectiveRichLines,
+      unifiedText: effectiveUnified,
+      routineIcons: s.routineIcons || ['write-in-books'],
+      timerSeconds: s.timerSeconds,
+      speakerNotes: s.speakerNotes || '',
+      pedagogicalBadges: {
+        principle: 'Rosenshine Small Steps',
+        cognitiveLoadNote: 'Focused single concept per slide.',
+      },
+    };
+  });
+
+  return {
+    insertAfter,
+    newSlides: normalizedNewSlides,
+  };
+}
+
+export async function runStage4InsertSlidesGeneration(
+  apiKey: string,
+  model: string,
+  sequence: LessonSequence,
+  lesson: PlannedLesson,
+  instruction: string,
+  fallbackInsertAfter?: number
+): Promise<{ insertAfter: number; newSlides: SlideData[] }> {
+  const prompt = buildStage4InsertSlidesPrompt(
+    sequence,
+    lesson,
+    instruction,
+    fallbackInsertAfter
+  );
+  const res = await callGeminiJson<any>({
+    apiKey,
+    model,
+    prompt,
+    temperature: 0.35,
+  });
+  return parseStage4InsertSlidesResponse(
+    typeof res === 'string' ? res : JSON.stringify(res),
+    lesson,
+    fallbackInsertAfter
+  );
 }
 
 export function parseBespokeSlideResponse(

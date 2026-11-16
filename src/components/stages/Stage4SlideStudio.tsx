@@ -46,6 +46,7 @@ import {
   LessonSequence,
   PlannedLesson,
   RoutineIconType,
+  SlideBlueprint,
   SlideData,
   SlideLineStyle,
   SlidePresetId,
@@ -82,12 +83,15 @@ import { SlideLayoutWaveModal, SlidePickerModalMode } from './SlideLayoutWaveMod
 import { PromptCopyPasteModal } from '../modals/PromptCopyPasteModal';
 import {
   parseBespokeSlideResponse,
+  parseStage4InsertSlidesResponse,
   parseStage4SlidesResponse,
   runBespokeSlideDesign,
+  runStage4InsertSlidesGeneration,
   runStage4SlidesGeneration,
 } from '../../services/geminiService';
 import {
   buildBespokeSlidePrompt,
+  buildStage4InsertSlidesPrompt,
   buildStage4SlidesPrompt,
 } from '../../services/pedagogyPrompts';
 
@@ -124,11 +128,13 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
   const [pickerModalMode, setPickerModalMode] =
     useState<SlidePickerModalMode | null>(null);
   const [promptModalTarget, setPromptModalTarget] = useState<
-    'surgical' | 'bespoke' | null
+    'surgical' | 'bespoke' | 'insert-deck' | null
   >(null);
 
   const [surgicalPrompt, setSurgicalPrompt] = useState('');
   const [bespokePrompt, setBespokePrompt] = useState('');
+  const [deckInsertPrompt, setDeckInsertPrompt] = useState('');
+  const [deckInsertPosition, setDeckInsertPosition] = useState<number | 'end'>('end');
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
   const [tableRowsInput, setTableRowsInput] = useState(3);
   const [tableColsInput, setTableColsInput] = useState(3);
@@ -704,6 +710,74 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
     }
   };
 
+  const handleDeckInsertAi = async () => {
+    if (!deckInsertPrompt.trim()) return;
+    setAiBusy('insert-deck');
+    setError(null);
+    try {
+      const targetAfter =
+        deckInsertPosition === 'end'
+          ? lesson.slidesData.length
+          : Number(deckInsertPosition);
+
+      const { insertAfter, newSlides } = await runStage4InsertSlidesGeneration(
+        settings.geminiApiKey,
+        settings.geminiModel,
+        sequence,
+        lesson,
+        deckInsertPrompt.trim(),
+        targetAfter
+      );
+
+      const insertIdx = Math.max(0, Math.min(lesson.slidesData.length, insertAfter));
+      const updatedSlides = [
+        ...lesson.slidesData.slice(0, insertIdx),
+        ...newSlides,
+        ...lesson.slidesData.slice(insertIdx),
+      ].map((s, idx) => ({
+        ...s,
+        slideNumber: idx + 1,
+      }));
+
+      const newBlueprints: SlideBlueprint[] = newSlides.map((s) => ({
+        id: s.blueprintId,
+        slideNumber: s.slideNumber,
+        title: s.title,
+        phase: s.phase,
+        presetId: s.presetId,
+        allocatedMinutes: 3,
+        contentSummary: s.unifiedText || s.title,
+        pupilActivity: 'Pupil engagement on new concept',
+        routineIcons: s.routineIcons,
+        conceptsIntroducedHere: [],
+        pedagogicalRationale: {
+          principle: 'Rosenshine Small Steps',
+          cognitiveLoadNote: 'Incremental slide insertion',
+        },
+      }));
+
+      const updatedBlueprints = [
+        ...lesson.slidesBlueprint.slice(0, insertIdx),
+        ...newBlueprints,
+        ...lesson.slidesBlueprint.slice(insertIdx),
+      ].map((b, idx) => ({
+        ...b,
+        slideNumber: idx + 1,
+      }));
+
+      updateLesson({
+        slidesData: updatedSlides,
+        slidesBlueprint: updatedBlueprints,
+      });
+      setDeckInsertPrompt('');
+      setSelectedSlideIdx(insertIdx);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to insert slides.');
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
       {/* Studio Top Bar */}
@@ -810,12 +884,23 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
             );
           })}
 
-          <button
-            onClick={() => setPickerModalMode('new-slide-wizard')}
-            className="w-full py-2.5 rounded-2xl border-2 border-dashed border-zinc-300 text-zinc-600 text-xs font-bold hover:border-emerald-500 hover:text-emerald-700 flex items-center justify-center gap-1.5 transition"
-          >
-            <Plus size={14} /> Add Slide
-          </button>
+          <div className="space-y-2 pt-1">
+            <button
+              onClick={() => setPickerModalMode('new-slide-wizard')}
+              className="w-full py-2 rounded-xl border-2 border-dashed border-zinc-300 text-zinc-600 text-xs font-bold hover:border-emerald-500 hover:text-emerald-700 flex items-center justify-center gap-1.5 transition bg-white/70"
+            >
+              <Plus size={13} /> Add Slide (Manual)
+            </button>
+            <button
+              onClick={() => {
+                setInspectorTab('ai');
+              }}
+              className="w-full py-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold hover:bg-amber-100 flex items-center justify-center gap-1.5 transition shadow-2xs"
+            >
+              <Sparkles size={13} className="text-amber-600" />
+              <span>AI Insert Slides...</span>
+            </button>
+          </div>
         </div>
 
         {/* Center 16:9 Canvas Stage */}
@@ -2634,6 +2719,73 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
                   </div>
                 )}
 
+                {/* AI Slide Deck Steer & Insert */}
+                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/90 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-extrabold text-xs text-amber-950 flex items-center gap-1.5">
+                      <Sparkles size={15} className="text-amber-600" />
+                      <span>AI Insert Slides &amp; Steer Deck</span>
+                    </h4>
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-full border border-amber-300/50">
+                      Preserves Existing Slides
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-600 leading-snug">
+                    Type instructions like <strong className="text-zinc-800">&quot;Add 2 slides for binary conversion after slide 3&quot;</strong> or specify an insertion point below:
+                  </p>
+                  <textarea
+                    value={deckInsertPrompt}
+                    onChange={(e) => setDeckInsertPrompt(e.target.value)}
+                    rows={2}
+                    placeholder='e.g. "Add 2 slides for binary conversion worked examples after slide 3"'
+                    className="w-full p-2.5 rounded-xl border border-zinc-300 bg-white text-xs text-zinc-900 placeholder:text-zinc-400 resize-none shadow-2xs focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-zinc-600 shrink-0">Insert Position:</span>
+                    <select
+                      value={deckInsertPosition}
+                      onChange={(e) =>
+                        setDeckInsertPosition(
+                          e.target.value === 'end' ? 'end' : Number(e.target.value)
+                        )
+                      }
+                      className="text-xs font-semibold px-2 py-1 rounded-lg border border-zinc-300 bg-white text-zinc-800 flex-1 outline-none"
+                    >
+                      <option value="end">
+                        At End of Lesson (After Slide {lesson.slidesData.length})
+                      </option>
+                      <option value={0}>At Very Beginning (Before Slide 1)</option>
+                      {lesson.slidesData.map((s, idx) => (
+                        <option key={s.id} value={idx + 1}>
+                          After Slide {idx + 1} ({s.title.slice(0, 24)}...)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5 pt-1">
+                    <button
+                      onClick={() => void handleDeckInsertAi()}
+                      disabled={aiBusy !== null || !deckInsertPrompt.trim()}
+                      className="w-full py-2 rounded-xl bg-amber-500 text-zinc-950 font-extrabold text-xs hover:bg-amber-400 disabled:opacity-50 flex items-center justify-center gap-1.5 transition shadow-2xs cursor-pointer"
+                    >
+                      {aiBusy === 'insert-deck' ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Sparkles size={14} />
+                      )}
+                      <span>Generate &amp; Insert Slides</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPromptModalTarget('insert-deck')}
+                      className="w-full py-1.5 rounded-xl border border-zinc-300 bg-white text-zinc-700 text-xs font-bold hover:bg-zinc-100 flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Terminal size={12} className="text-amber-600" />
+                      <span>Copy Prompt / Paste AI (No API Key)</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div className="p-4 rounded-2xl bg-[#FAF6F0] border border-zinc-200 space-y-2.5">
                   <h4 className="font-bold text-zinc-900 flex items-center gap-1.5">
                     <Sparkles size={15} className="text-emerald-600" />
@@ -2915,12 +3067,23 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
       <PromptCopyPasteModal
         isOpen={promptModalTarget !== null}
         title={
-          promptModalTarget === 'bespoke'
+          promptModalTarget === 'insert-deck'
+            ? `Insert Slides into Deck: Prompt / Paste JSON`
+            : promptModalTarget === 'bespoke'
             ? `Slide ${slide.slideNumber}: Bespoke Designer Prompt / Paste JSON`
             : `Slide ${slide.slideNumber}: Surgical Revision Prompt / Paste JSON`
         }
         promptText={
-          promptModalTarget === 'bespoke'
+          promptModalTarget === 'insert-deck'
+            ? buildStage4InsertSlidesPrompt(
+                sequence,
+                lesson,
+                deckInsertPrompt.trim() || 'Add 2 slides for this concept',
+                deckInsertPosition === 'end'
+                  ? lesson.slidesData.length
+                  : Number(deckInsertPosition)
+              )
+            : promptModalTarget === 'bespoke'
             ? buildBespokeSlidePrompt(
                 sequence,
                 lesson,
@@ -2937,7 +3100,56 @@ export const Stage4SlideStudio: React.FC<Stage4SlideStudioProps> = ({
         }
         onClose={() => setPromptModalTarget(null)}
         onApplyResponse={(raw) => {
-          if (promptModalTarget === 'bespoke') {
+          if (promptModalTarget === 'insert-deck') {
+            const targetAfter =
+              deckInsertPosition === 'end'
+                ? lesson.slidesData.length
+                : Number(deckInsertPosition);
+            const { insertAfter, newSlides } = parseStage4InsertSlidesResponse(
+              raw,
+              lesson,
+              targetAfter
+            );
+            const insertIdx = Math.max(0, Math.min(lesson.slidesData.length, insertAfter));
+            const updatedSlides = [
+              ...lesson.slidesData.slice(0, insertIdx),
+              ...newSlides,
+              ...lesson.slidesData.slice(insertIdx),
+            ].map((s, idx) => ({
+              ...s,
+              slideNumber: idx + 1,
+            }));
+            const newBlueprints: SlideBlueprint[] = newSlides.map((s) => ({
+              id: s.blueprintId,
+              slideNumber: s.slideNumber,
+              title: s.title,
+              phase: s.phase,
+              presetId: s.presetId,
+              allocatedMinutes: 3,
+              contentSummary: s.unifiedText || s.title,
+              pupilActivity: 'Pupil engagement on new concept',
+              routineIcons: s.routineIcons,
+              conceptsIntroducedHere: [],
+              pedagogicalRationale: {
+                principle: 'Rosenshine Small Steps',
+                cognitiveLoadNote: 'Incremental slide insertion',
+              },
+            }));
+            const updatedBlueprints = [
+              ...lesson.slidesBlueprint.slice(0, insertIdx),
+              ...newBlueprints,
+              ...lesson.slidesBlueprint.slice(insertIdx),
+            ].map((b, idx) => ({
+              ...b,
+              slideNumber: idx + 1,
+            }));
+            updateLesson({
+              slidesData: updatedSlides,
+              slidesBlueprint: updatedBlueprints,
+            });
+            setDeckInsertPrompt('');
+            setSelectedSlideIdx(insertIdx);
+          } else if (promptModalTarget === 'bespoke') {
             const bespoke = parseBespokeSlideResponse(raw, slide);
             updateLesson({
               slidesData: lesson.slidesData.map((s) =>

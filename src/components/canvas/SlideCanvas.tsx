@@ -3672,6 +3672,18 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                     borderColor: topOnDark
                       ? 'rgba(255,255,255,0.32)'
                       : palette.borderAccent,
+                    borderTopColor: topOnDark
+                      ? 'rgba(255,255,255,0.32)'
+                      : palette.borderAccent,
+                    borderRightColor: topOnDark
+                      ? 'rgba(255,255,255,0.32)'
+                      : palette.borderAccent,
+                    borderBottomColor: topOnDark
+                      ? 'rgba(255,255,255,0.32)'
+                      : palette.borderAccent,
+                    borderLeftColor: topOnDark
+                      ? 'rgba(255,255,255,0.32)'
+                      : palette.borderAccent,
                   }}
                 >
                   <div

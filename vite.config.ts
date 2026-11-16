@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? './' : '/',
-  plugins: [react(), tailwindcss()],
+  plugins: [tailwindcss(), react()],
   optimizeDeps: {
     include: ['pptxgenjs', 'jszip', 'idb-keyval', 'lucide-react'],
   },

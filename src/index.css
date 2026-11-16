@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@source "../src";
 
 @layer base {
   :root {
@@ -99,6 +98,6 @@
   border-color: #E2E8F0;
 }
 
-[class*="border-2"]:not([class*="border-zinc-"]):not([class*="border-white"]):not([class*="border-black"]):not([class*="border-sky-"]):not([class*="border-emerald-"]):not([class*="border-rose-"]):not([class*="border-indigo-"]) {
+[class*="border"]:not([class*="border-black"]):not([class*="border-zinc-7"]):not([class*="border-zinc-8"]):not([class*="border-zinc-9"]):not([class*="border-white"]):not([class*="border-sky-"]):not([class*="border-emerald-"]):not([class*="border-rose-"]):not([class*="border-amber-"]):not([class*="border-indigo-"]):not([class*="border-slate-"]) {
   border-color: #E2E8F0;
 }
